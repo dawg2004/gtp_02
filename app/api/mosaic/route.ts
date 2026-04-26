@@ -204,6 +204,19 @@ function parseStrength(rawStrength: string) {
     : 3;
 }
 
+function partialStrengthProfile(strength: number) {
+  const index = Math.max(0, Math.min(4, strength - 1));
+
+  return {
+    simpleRatio: [0.14, 0.24, 0.38, 0.56, 0.78][index],
+    simplePreBlur: [5, 10, 18, 28, 42][index],
+    simpleSaturation: [0.82, 0.68, 0.52, 0.4, 0.28][index],
+    mosaicBlock: [16, 28, 44, 68, 104][index],
+    blurSigma: [6, 12, 22, 34, 52][index],
+    lensSigma: [8, 16, 28, 44, 64][index],
+  };
+}
+
 function parseStyle(formData: FormData): Style {
   const style = String(formData.get("style") ?? "").trim();
   const mode = String(formData.get("mode") ?? "").trim();
@@ -530,20 +543,18 @@ async function applyFullImageEffect(
   region: Region
 ) {
   const isPartialRegion = region.maskShape === "capsule";
-  const effectiveStrength = isPartialRegion ? Math.min(5, strength + 1) : strength;
+  const partialProfile = isPartialRegion ? partialStrengthProfile(strength) : null;
 
   if (style === "simple_mosaic") {
     const shortSide = Math.min(region.width, region.height);
-    const ratioByStrength = isPartialRegion
-      ? [0.3, 0.42, 0.56, 0.72, 0.9]
-      : [0.16, 0.22, 0.28, 0.34, 0.42];
-    const ratio = ratioByStrength[Math.max(0, Math.min(4, effectiveStrength - 1))];
+    const ratioByStrength = [0.16, 0.22, 0.28, 0.34, 0.42];
+    const ratio = partialProfile?.simpleRatio ?? ratioByStrength[Math.max(0, Math.min(4, strength - 1))];
     const blockSize = Math.max(1, Math.round(shortSide * ratio));
     const downW = Math.max(2, Math.floor(imageWidth / blockSize));
     const downH = Math.max(2, Math.floor(imageHeight / blockSize));
     const preBlurred = await sharp(source)
-      .blur(isPartialRegion ? Math.max(24, effectiveStrength * 12) : Math.max(10, effectiveStrength * 7))
-      .modulate({ saturation: isPartialRegion ? 0.35 : 0.65, brightness: 1.03 })
+      .blur(partialProfile?.simplePreBlur ?? Math.max(10, strength * 7))
+      .modulate({ saturation: partialProfile?.simpleSaturation ?? 0.65, brightness: 1.03 })
       .png()
       .toBuffer();
 
@@ -556,7 +567,7 @@ async function applyFullImageEffect(
   }
 
   if (style === "mosaic") {
-    const block = Math.max(isPartialRegion ? 36 : 18, Math.floor((isPartialRegion ? 48 : 24) * effectiveStrength));
+    const block = partialProfile?.mosaicBlock ?? Math.max(18, Math.floor(24 * strength));
     const downW = Math.max(3, Math.floor(imageWidth / block));
     const downH = Math.max(3, Math.floor(imageHeight / block));
 
@@ -568,8 +579,8 @@ async function applyFullImageEffect(
   }
 
   const sigma = style === "lens"
-    ? Math.max(isPartialRegion ? 42 : 14, effectiveStrength * (isPartialRegion ? 14 : 8))
-    : Math.max(isPartialRegion ? 36 : 10, effectiveStrength * (isPartialRegion ? 12 : 6));
+    ? partialProfile?.lensSigma ?? Math.max(14, strength * 8)
+    : partialProfile?.blurSigma ?? Math.max(10, strength * 6);
 
   return sharp(source).blur(sigma).png().toBuffer();
 }
