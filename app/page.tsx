@@ -197,9 +197,9 @@ export default function Home() {
 
         const strengthMap: Record<(typeof STRENGTHS)[number], string> = {
           弱: "1",
-          中: "2",
-          強: "3",
-          最強: "4",
+          中: "3",
+          強: "4",
+          最強: "5",
         };
 
         const scope =

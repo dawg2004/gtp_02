@@ -64,6 +64,29 @@ function expandRegion(
   );
 }
 
+function tunePartialRegion(region: Region, scope: Scope, imageWidth: number, imageHeight: number): Region {
+  if (scope === "face") {
+    return region;
+  }
+
+  const expanded = expandRegion(
+    region,
+    imageWidth,
+    imageHeight,
+    scope === "eyes_only" ? 0.22 : 0.16,
+    scope === "eyes_only" ? 0.45 : 0.35
+  );
+
+  return {
+    ...region,
+    ...expanded,
+    ellipseRx: scope === "eyes_only" ? 0.42 : 0.36,
+    ellipseRy: scope === "eyes_only" ? 0.42 : 0.36,
+    blurMask: scope === "eyes_only" ? 8 : 10,
+    maskShape: "capsule",
+  };
+}
+
 function regionForScope(scope: Scope, width: number, height: number): Region {
   if (scope === "eyes_only") {
     return {
@@ -506,16 +529,21 @@ async function applyFullImageEffect(
   imageHeight: number,
   region: Region
 ) {
+  const isPartialRegion = region.maskShape === "capsule";
+  const effectiveStrength = isPartialRegion ? Math.min(5, strength + 1) : strength;
+
   if (style === "simple_mosaic") {
     const shortSide = Math.min(region.width, region.height);
-    const ratioByStrength = [0.16, 0.22, 0.28, 0.34, 0.42];
-    const ratio = ratioByStrength[Math.max(0, Math.min(4, strength - 1))];
+    const ratioByStrength = isPartialRegion
+      ? [0.3, 0.42, 0.56, 0.72, 0.9]
+      : [0.16, 0.22, 0.28, 0.34, 0.42];
+    const ratio = ratioByStrength[Math.max(0, Math.min(4, effectiveStrength - 1))];
     const blockSize = Math.max(1, Math.round(shortSide * ratio));
     const downW = Math.max(2, Math.floor(imageWidth / blockSize));
     const downH = Math.max(2, Math.floor(imageHeight / blockSize));
     const preBlurred = await sharp(source)
-      .blur(Math.max(10, strength * 7))
-      .modulate({ saturation: 0.65, brightness: 1.03 })
+      .blur(isPartialRegion ? Math.max(24, effectiveStrength * 12) : Math.max(10, effectiveStrength * 7))
+      .modulate({ saturation: isPartialRegion ? 0.35 : 0.65, brightness: 1.03 })
       .png()
       .toBuffer();
 
@@ -528,7 +556,7 @@ async function applyFullImageEffect(
   }
 
   if (style === "mosaic") {
-    const block = Math.max(18, Math.floor(24 * strength));
+    const block = Math.max(isPartialRegion ? 36 : 18, Math.floor((isPartialRegion ? 48 : 24) * effectiveStrength));
     const downW = Math.max(3, Math.floor(imageWidth / block));
     const downH = Math.max(3, Math.floor(imageHeight / block));
 
@@ -539,7 +567,9 @@ async function applyFullImageEffect(
       .toBuffer();
   }
 
-  const sigma = style === "lens" ? Math.max(14, strength * 8) : Math.max(10, strength * 6);
+  const sigma = style === "lens"
+    ? Math.max(isPartialRegion ? 42 : 14, effectiveStrength * (isPartialRegion ? 14 : 8))
+    : Math.max(isPartialRegion ? 36 : 10, effectiveStrength * (isPartialRegion ? 12 : 6));
 
   return sharp(source).blur(sigma).png().toBuffer();
 }
@@ -621,7 +651,7 @@ export async function POST(req: NextRequest) {
           ...clampRegion(x, y, width, height, imageWidth, imageHeight),
           ellipseRx: scope === "face" ? 0.38 : 0.3,
           ellipseRy: scope === "face" ? 0.48 : 0.3,
-          blurMask: scope === "face" ? 3 : 26,
+          blurMask: scope === "face" ? 3 : 10,
           maskShape: scope === "face" ? "oval" : "capsule",
         };
       } else {
@@ -646,9 +676,12 @@ export async function POST(req: NextRequest) {
       };
     }
 
+    region = tunePartialRegion(region, scope, imageWidth, imageHeight);
+
     const fullEffect = await applyFullImageEffect(normalizedBytes, style, strength, imageWidth, imageHeight, region);
-    let alphaMask = await buildFullImageMask(imageWidth, imageHeight, region, regionPolygon);
-    if (regionPolygon && !hasUsableMask(alphaMask, region)) {
+    const maskPolygon = scope === "face" ? regionPolygon : null;
+    let alphaMask = await buildFullImageMask(imageWidth, imageHeight, region, maskPolygon);
+    if (maskPolygon && !hasUsableMask(alphaMask, region)) {
       alphaMask = await buildFullImageMask(imageWidth, imageHeight, region);
     }
     const maskedEffect = await applyFullImageMask(fullEffect, alphaMask, imageWidth, imageHeight);
