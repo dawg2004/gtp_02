@@ -312,7 +312,16 @@ async function applyPixelate(
   return applySoftMask(pixelated, width, height, ellipseRx, ellipseRy, blurMask, maskShape);
 }
 
-async function applySimplePixelate(source: Buffer, strength: number, width: number, height: number) {
+async function applySimplePixelate(
+  source: Buffer,
+  strength: number,
+  width: number,
+  height: number,
+  ellipseRx: number,
+  ellipseRy: number,
+  blurMask: number,
+  maskShape: MaskShape
+) {
   const shortSide = Math.min(width, height);
   const ratioByStrength = [0.06, 0.08, 0.1, 0.12, 0.15];
   const ratio = ratioByStrength[Math.max(0, Math.min(4, strength - 1))];
@@ -320,11 +329,13 @@ async function applySimplePixelate(source: Buffer, strength: number, width: numb
   const downW = Math.max(1, Math.floor(width / blockSize));
   const downH = Math.max(1, Math.floor(height / blockSize));
 
-  return sharp(source)
+  const pixelated = await sharp(source)
     .resize(downW, downH, { kernel: "nearest" })
     .resize(width, height, { kernel: "nearest" })
     .png()
     .toBuffer();
+
+  return applySoftMask(pixelated, width, height, ellipseRx, ellipseRy, blurMask, maskShape);
 }
 
 export async function POST(req: NextRequest) {
@@ -399,7 +410,16 @@ export async function POST(req: NextRequest) {
 
     const regionOutput =
       style === "simple_mosaic"
-        ? await applySimplePixelate(extracted, strength, region.width, region.height)
+        ? await applySimplePixelate(
+            extracted,
+            strength,
+            region.width,
+            region.height,
+            region.ellipseRx,
+            region.ellipseRy,
+            region.blurMask,
+            region.maskShape
+          )
         : style === "mosaic"
         ? await applyPixelate(
             extracted,

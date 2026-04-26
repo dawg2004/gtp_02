@@ -433,7 +433,7 @@ export default function Home() {
 
                 <div>
                   <div style={sectionLabelStyle}>エフェクト</div>
-                  <div style={{ fontSize: 11, color: "#6a6258", marginBottom: 8 }}>自動モザイクは安定重視で四角く広めに隠します。</div>
+                  <div style={{ fontSize: 11, color: "#6a6258", marginBottom: 8 }}>自動モザイクは顔の輪郭に沿って広めに隠します。</div>
                   <div style={{ display: "flex", gap: 10 }}>
                     <button onClick={() => void runMosaic("blur")} style={actionButtonStyle} disabled={!mosaicSrc || !mosaicBox || mosaicLoading}>
                       ブラー
