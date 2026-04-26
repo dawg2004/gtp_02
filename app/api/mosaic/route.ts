@@ -268,7 +268,7 @@ async function applySoftMask(
   maskShape: MaskShape
 ) {
   const alphaMask = await buildSoftMask(width, height, ellipseRx, ellipseRy, blurMask, maskShape);
-  return sharp(source).ensureAlpha().joinChannel(alphaMask).png().toBuffer();
+  return sharp(source).removeAlpha().joinChannel(alphaMask).png().toBuffer();
 }
 
 async function applyBlur(
@@ -282,7 +282,7 @@ async function applyBlur(
   blurMask: number,
   maskShape: MaskShape
 ) {
-  const sigma = style === "lens" ? Math.max(6, strength * 4) : Math.max(3, strength * 3);
+  const sigma = style === "lens" ? Math.max(14, strength * 8) : Math.max(10, strength * 6);
 
   const region = await sharp(source).blur(sigma).png().toBuffer();
 
@@ -299,7 +299,7 @@ async function applyPixelate(
   blurMask: number,
   maskShape: MaskShape
 ) {
-  const block = Math.max(12, Math.floor(16 * strength));
+  const block = Math.max(18, Math.floor(24 * strength));
   const downW = Math.max(3, Math.floor(width / block));
   const downH = Math.max(3, Math.floor(height / block));
 
@@ -314,7 +314,7 @@ async function applyPixelate(
 
 async function applySimplePixelate(source: Buffer, strength: number, width: number, height: number) {
   const shortSide = Math.min(width, height);
-  const ratioByStrength = [0.03, 0.04, 0.05, 0.06, 0.075];
+  const ratioByStrength = [0.06, 0.08, 0.1, 0.12, 0.15];
   const ratio = ratioByStrength[Math.max(0, Math.min(4, strength - 1))];
   const blockSize = Math.max(1, Math.round(shortSide * ratio));
   const downW = Math.max(1, Math.floor(width / blockSize));
@@ -345,7 +345,8 @@ export async function POST(req: NextRequest) {
     }
 
     const bytes = Buffer.from(await file.arrayBuffer());
-    const meta = await sharp(bytes).metadata();
+    const normalizedBytes = await sharp(bytes).rotate().png().toBuffer();
+    const meta = await sharp(normalizedBytes).metadata();
     const imageWidth = meta.width ?? 0;
     const imageHeight = meta.height ?? 0;
 
@@ -386,7 +387,7 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    const extracted = await sharp(bytes)
+    const extracted = await sharp(normalizedBytes)
       .extract({
         left: region.left,
         top: region.top,
@@ -422,7 +423,7 @@ export async function POST(req: NextRequest) {
             region.maskShape
           );
 
-    const output = await sharp(bytes)
+    const output = await sharp(normalizedBytes)
       .composite([
         {
           input: regionOutput,
