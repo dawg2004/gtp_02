@@ -259,6 +259,74 @@ function polygonToSvgPoints(points: FacePoint[], width: number, height: number) 
     .join(" ");
 }
 
+function buildFacePath(region: Pick<Region, "left" | "top" | "width" | "height">) {
+  const { left, top, width, height } = region;
+
+  return [
+    `M ${left + width * 0.5} ${top + height * 0.03}`,
+    `C ${left + width * 0.26} ${top + height * 0.03}, ${left + width * 0.1} ${top + height * 0.18}, ${left + width * 0.08} ${top + height * 0.42}`,
+    `C ${left + width * 0.06} ${top + height * 0.66}, ${left + width * 0.18} ${top + height * 0.86}, ${left + width * 0.5} ${top + height * 0.98}`,
+    `C ${left + width * 0.82} ${top + height * 0.86}, ${left + width * 0.94} ${top + height * 0.66}, ${left + width * 0.92} ${top + height * 0.42}`,
+    `C ${left + width * 0.9} ${top + height * 0.18}, ${left + width * 0.74} ${top + height * 0.03}, ${left + width * 0.5} ${top + height * 0.03} Z`,
+  ].join(" ");
+}
+
+async function buildFullImageMask(
+  imageWidth: number,
+  imageHeight: number,
+  region: Region,
+  polygon?: FacePoint[] | null
+) {
+  const filterPad = region.blurMask * 3;
+  const capsuleX = region.left + region.width * 0.12;
+  const capsuleY = region.top + region.height * 0.18;
+  const capsuleWidth = region.width * 0.76;
+  const capsuleHeight = region.height * 0.64;
+  const capsuleRadius = Math.min(capsuleWidth, capsuleHeight) * 0.42;
+
+  let shapeMarkup = `<ellipse cx="${region.left + region.width / 2}" cy="${region.top + region.height / 2}" rx="${region.width * region.ellipseRx}" ry="${region.height * region.ellipseRy}" fill="white" filter="url(#soft)" />`;
+
+  if (polygon?.length) {
+    shapeMarkup = `<polygon points="${polygonToSvgPoints(polygon, imageWidth, imageHeight)}" fill="white" filter="url(#soft)" />`;
+  } else if (region.maskShape === "face") {
+    shapeMarkup = `<path d="${buildFacePath(region)}" fill="white" filter="url(#soft)" />`;
+  } else if (region.maskShape === "capsule") {
+    shapeMarkup = `<rect x="${capsuleX}" y="${capsuleY}" width="${capsuleWidth}" height="${capsuleHeight}" rx="${capsuleRadius}" ry="${capsuleRadius}" fill="white" filter="url(#soft)" />`;
+  }
+
+  const maskSvg = Buffer.from(`
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="${imageWidth}"
+      height="${imageHeight}"
+      viewBox="0 0 ${imageWidth} ${imageHeight}"
+    >
+      <rect width="100%" height="100%" fill="black" fill-opacity="0" />
+      <defs>
+        <filter
+          id="soft"
+          x="${-filterPad}"
+          y="${-filterPad}"
+          width="${imageWidth + filterPad * 2}"
+          height="${imageHeight + filterPad * 2}"
+          filterUnits="userSpaceOnUse"
+          color-interpolation-filters="sRGB"
+        >
+          <feGaussianBlur stdDeviation="${region.blurMask}" />
+        </filter>
+      </defs>
+      ${shapeMarkup}
+    </svg>
+  `);
+
+  return sharp(maskSvg)
+    .resize(imageWidth, imageHeight)
+    .ensureAlpha()
+    .extractChannel("alpha")
+    .raw()
+    .toBuffer();
+}
+
 async function buildSoftMask(
   width: number,
   height: number,
@@ -420,6 +488,65 @@ async function applySimplePixelate(
   return applySoftMask(pixelated, width, height, ellipseRx, ellipseRy, blurMask, maskShape, polygon);
 }
 
+async function applyFullImageEffect(
+  source: Buffer,
+  style: Style,
+  strength: number,
+  imageWidth: number,
+  imageHeight: number,
+  region: Region
+) {
+  if (style === "simple_mosaic") {
+    const shortSide = Math.min(region.width, region.height);
+    const ratioByStrength = [0.16, 0.22, 0.28, 0.34, 0.42];
+    const ratio = ratioByStrength[Math.max(0, Math.min(4, strength - 1))];
+    const blockSize = Math.max(1, Math.round(shortSide * ratio));
+    const downW = Math.max(2, Math.floor(imageWidth / blockSize));
+    const downH = Math.max(2, Math.floor(imageHeight / blockSize));
+    const preBlurred = await sharp(source)
+      .blur(Math.max(10, strength * 7))
+      .modulate({ saturation: 0.65, brightness: 1.03 })
+      .png()
+      .toBuffer();
+
+    return sharp(preBlurred)
+      .resize(downW, downH, { kernel: "nearest" })
+      .resize(imageWidth, imageHeight, { kernel: "nearest" })
+      .blur(1.2)
+      .png()
+      .toBuffer();
+  }
+
+  if (style === "mosaic") {
+    const block = Math.max(18, Math.floor(24 * strength));
+    const downW = Math.max(3, Math.floor(imageWidth / block));
+    const downH = Math.max(3, Math.floor(imageHeight / block));
+
+    return sharp(source)
+      .resize(downW, downH, { kernel: "nearest" })
+      .resize(imageWidth, imageHeight, { kernel: "nearest" })
+      .png()
+      .toBuffer();
+  }
+
+  const sigma = style === "lens" ? Math.max(14, strength * 8) : Math.max(10, strength * 6);
+
+  return sharp(source).blur(sigma).png().toBuffer();
+}
+
+async function applyFullImageMask(
+  source: Buffer,
+  alphaMask: Buffer,
+  imageWidth: number,
+  imageHeight: number
+) {
+  return sharp(source)
+    .removeAlpha()
+    .joinChannel(alphaMask, { raw: { width: imageWidth, height: imageHeight, channels: 1 } })
+    .png()
+    .toBuffer();
+}
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -481,65 +608,16 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    const localFacePolygon = facePolygon?.map(point => ({
-      x: point.x - region.left,
-      y: point.y - region.top,
-    })) ?? null;
-
-    const extracted = await sharp(normalizedBytes)
-      .extract({
-        left: region.left,
-        top: region.top,
-        width: region.width,
-        height: region.height,
-      })
-      .png()
-      .toBuffer();
-
-    const regionOutput =
-      style === "simple_mosaic"
-        ? await applySimplePixelate(
-            extracted,
-            strength,
-            region.width,
-            region.height,
-            region.ellipseRx,
-            region.ellipseRy,
-            region.blurMask,
-            region.maskShape,
-            localFacePolygon
-          )
-        : style === "mosaic"
-        ? await applyPixelate(
-            extracted,
-            strength,
-            region.width,
-            region.height,
-            region.ellipseRx,
-            region.ellipseRy,
-            region.blurMask,
-            region.maskShape,
-            localFacePolygon
-          )
-        : await applyBlur(
-            extracted,
-            style,
-            strength,
-            region.width,
-            region.height,
-            region.ellipseRx,
-            region.ellipseRy,
-            region.blurMask,
-            region.maskShape,
-            localFacePolygon
-          );
+    const fullEffect = await applyFullImageEffect(normalizedBytes, style, strength, imageWidth, imageHeight, region);
+    const alphaMask = await buildFullImageMask(imageWidth, imageHeight, region, facePolygon);
+    const maskedEffect = await applyFullImageMask(fullEffect, alphaMask, imageWidth, imageHeight);
 
     const output = await sharp(normalizedBytes)
       .composite([
         {
-          input: regionOutput,
-          left: region.left,
-          top: region.top,
+          input: maskedEffect,
+          left: 0,
+          top: 0,
         },
       ])
       .png()
