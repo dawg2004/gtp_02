@@ -404,11 +404,7 @@ async function applySoftMask(
   polygon?: FacePoint[] | null
 ) {
   const alphaMask = await buildSoftMask(width, height, ellipseRx, ellipseRy, blurMask, maskShape, polygon);
-  return sharp(source)
-    .removeAlpha()
-    .joinChannel(alphaMask, { raw: { width, height, channels: 1 } })
-    .png()
-    .toBuffer();
+  return applyAlphaMask(source, alphaMask, width, height);
 }
 
 async function applyBlur(
@@ -540,9 +536,33 @@ async function applyFullImageMask(
   imageWidth: number,
   imageHeight: number
 ) {
-  return sharp(source)
+  return applyAlphaMask(source, alphaMask, imageWidth, imageHeight);
+}
+
+async function applyAlphaMask(
+  source: Buffer,
+  alphaMask: Buffer,
+  width: number,
+  height: number
+) {
+  const sourceRaw = await sharp(source)
     .removeAlpha()
-    .joinChannel(alphaMask, { raw: { width: imageWidth, height: imageHeight, channels: 1 } })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const rgba = Buffer.alloc(width * height * 4);
+
+  for (let i = 0; i < width * height; i += 1) {
+    const sourceIndex = i * sourceRaw.info.channels;
+    const rgbaIndex = i * 4;
+
+    rgba[rgbaIndex] = sourceRaw.data[sourceIndex];
+    rgba[rgbaIndex + 1] = sourceRaw.data[sourceIndex + 1];
+    rgba[rgbaIndex + 2] = sourceRaw.data[sourceIndex + 2];
+    rgba[rgbaIndex + 3] = alphaMask[i] ?? 0;
+  }
+
+  return sharp(rgba, { raw: { width, height, channels: 4 } })
     .png()
     .toBuffer();
 }
