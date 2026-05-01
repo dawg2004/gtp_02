@@ -1,12 +1,13 @@
 "use client";
 
 import { detectFaceRegions, type FacePoint, type FaceRegions } from "@/lib/faceDetector";
-import { type CSSProperties, useCallback, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 
 type TabId = "generate" | "avatar" | "mosaic" | "edit" | "video" | "history" | "plan";
 type MosaicBox = { x: number; y: number; width: number; height: number };
 type ImageSize = { width: number; height: number };
 type MosaicMode = "blur" | "gaussian" | "simple";
+type VideoModel = "grok" | "seedance";
 
 const NAV_ITEMS: Array<{ id: TabId; label: string; icon: string }> = [
   { id: "generate", label: "画像生成", icon: "*" },
@@ -34,6 +35,18 @@ export default function Home() {
   const [mosaicStrength, setMosaicStrength] = useState<(typeof STRENGTHS)[number]>("中");
   const [mosaicStage, setMosaicStage] = useState("");
   const [mosaicLoading, setMosaicLoading] = useState(false);
+
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [videoModel, setVideoModel] = useState<VideoModel>("grok");
+  const [videoPrompt, setVideoPrompt] = useState("natural movement, cinematic");
+  const [videoDuration, setVideoDuration] = useState(5);
+  const [videoResolution, setVideoResolution] = useState("720p");
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoResult, setVideoResult] = useState<string | null>(null);
+  const [videoRequestId, setVideoRequestId] = useState<string | null>(null);
+  const [videoStatus, setVideoStatus] = useState("");
+  const videoPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const buildRegionBox = useCallback((regions: FaceRegions, area: (typeof AREAS)[number]) => {
     if (area === "目元のみ") {
@@ -247,6 +260,63 @@ export default function Home() {
     [buildAdjustedPolygon, mosaicArea, mosaicBox, mosaicRegions, mosaicSrc, mosaicStrength]
   );
 
+  const handleVideoUpload = useCallback((file: File) => {
+    setVideoFile(file);
+    setVideoSrc(URL.createObjectURL(file));
+    setVideoResult(null);
+    setVideoStatus("");
+  }, []);
+
+  const submitVideo = useCallback(async () => {
+    if (!videoFile) return;
+    setVideoLoading(true);
+    setVideoStatus("画像をアップロード中...");
+    try {
+      const formData = new FormData();
+      formData.append("file", videoFile);
+      formData.append("model", videoModel);
+      formData.append("prompt", videoPrompt);
+      formData.append("duration", String(videoDuration));
+      formData.append("resolution", videoResolution);
+      const res = await fetch("/api/video", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? "提出に失敗しました");
+      setVideoRequestId(data.requestId);
+      setVideoStatus("生成キューに追加しました。しばらくお待ちください...");
+    } catch (error) {
+      setVideoStatus(error instanceof Error ? error.message : "エラーが発生しました");
+      setVideoLoading(false);
+    }
+  }, [videoDuration, videoFile, videoModel, videoPrompt, videoResolution]);
+
+  useEffect(() => {
+    if (!videoRequestId) return;
+    videoPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/video?requestId=${videoRequestId}&model=${videoModel}`);
+        const data = await res.json();
+        if (data.status === "completed") {
+          clearInterval(videoPollRef.current!);
+          setVideoRequestId(null);
+          setVideoResult(data.videoUrl);
+          setVideoLoading(false);
+          setVideoStatus("完成！");
+        } else if (data.status === "failed") {
+          clearInterval(videoPollRef.current!);
+          setVideoRequestId(null);
+          setVideoLoading(false);
+          setVideoStatus("生成に失敗しました");
+        } else {
+          const pos = (data as { queue_position?: number }).queue_position;
+          setVideoStatus(pos != null ? `生成中... (キュー位置: ${pos})` : "生成中...");
+        }
+      } catch {
+        // keep polling on transient errors
+      }
+    }, 5000);
+    return () => { if (videoPollRef.current) clearInterval(videoPollRef.current); };
+  }, [videoRequestId, videoModel]);
+
   const renderPlaceholder = (title: string, body: string) => (
     <div style={panelStyle}>
       <div style={{ fontSize: 18, fontWeight: 700, color: "#f0ece4", marginBottom: 12 }}>{title}</div>
@@ -308,7 +378,7 @@ export default function Home() {
         </div>
 
         <div className="main-content" style={{ flex: 1, padding: 24, overflowY: "auto" }}>
-          {tab !== "mosaic"
+          {tab !== "mosaic" && tab !== "video"
             ? renderPlaceholder(
                 NAV_ITEMS.find(item => item.id === tab)?.label ?? "LUMIVEIL",
                 "この画面は順次移植中です。まずはモザイク機能を安定させ、MediaPipe Face Landmarker と微調整UIを優先しています。"
@@ -481,6 +551,156 @@ export default function Home() {
                 <button onClick={resetMosaic} style={{ ...smallButtonStyle, width: "100%" }}>
                   リセット
                 </button>
+              </div>
+            </div>
+          ) : null}
+
+          {tab === "video" ? (
+            <div className="layout-grid" style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: 20 }}>
+              <div style={panelStyle}>
+                <div style={sectionLabelStyle}>元画像</div>
+                <label style={uploadButtonStyle}>
+                  画像を選択する
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={{ display: "none" }}
+                    onChange={e => e.target.files?.[0] && handleVideoUpload(e.target.files[0])}
+                  />
+                </label>
+
+                {videoSrc && (
+                  <div style={{ marginTop: 14, borderRadius: 10, overflow: "hidden", background: "#000", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <img src={videoSrc} alt="元画像" style={{ width: "100%", maxHeight: 360, objectFit: "contain", display: "block" }} />
+                  </div>
+                )}
+
+                {videoResult && (
+                  <div style={{ marginTop: 20 }}>
+                    <div style={{ ...sectionLabelStyle, marginBottom: 10 }}>生成された動画</div>
+                    <video
+                      src={videoResult}
+                      controls
+                      autoPlay
+                      loop
+                      style={{ width: "100%", borderRadius: 10, background: "#000" }}
+                    />
+                    <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+                      <a
+                        href={videoResult}
+                        download="video.mp4"
+                        style={{ ...actionButtonStyle, textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", flex: 1 }}
+                      >
+                        ダウンロード
+                      </a>
+                      <button
+                        onClick={() => { setVideoResult(null); setVideoStatus(""); }}
+                        style={{ ...smallButtonStyle, flex: 1 }}
+                      >
+                        クリア
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={panelStyle}>
+                  <div style={sectionLabelStyle}>モデル</div>
+                  <div style={buttonRowStyle}>
+                    {(["grok", "seedance"] as VideoModel[]).map(id => (
+                      <button
+                        key={id}
+                        onClick={() => {
+                          setVideoModel(id);
+                          setVideoResolution(id === "grok" ? "720p" : "720p");
+                        }}
+                        style={choiceButtonStyle(videoModel === id)}
+                      >
+                        {id === "grok" ? "Grok" : "Seedance 2"}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 11, color: "#6a6258" }}>
+                    {videoModel === "grok"
+                      ? "xAI Grok Imagine — $0.05/s (480p) · $0.07/s (720p)"
+                      : "ByteDance Seedance 2.0 Fast — $0.24/s"}
+                  </div>
+                </div>
+
+                <div style={panelStyle}>
+                  <div style={sectionLabelStyle}>プロンプト</div>
+                  <textarea
+                    value={videoPrompt}
+                    onChange={e => setVideoPrompt(e.target.value)}
+                    rows={3}
+                    style={{
+                      width: "100%",
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      background: "rgba(0,0,0,0.08)",
+                      border: "1px solid #a89e8e",
+                      color: "#111",
+                      fontSize: 12,
+                      fontFamily: "inherit",
+                      resize: "vertical",
+                    }}
+                  />
+                </div>
+
+                <div style={panelStyle}>
+                  <div style={sectionLabelStyle}>尺</div>
+                  <div style={buttonRowStyle}>
+                    {[5, 10].map(d => (
+                      <button key={d} onClick={() => setVideoDuration(d)} style={choiceButtonStyle(videoDuration === d)}>
+                        {d}秒
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={panelStyle}>
+                  <div style={sectionLabelStyle}>解像度</div>
+                  <div style={buttonRowStyle}>
+                    {(videoModel === "grok" ? ["480p", "720p"] : ["720p", "1080p"]).map(r => (
+                      <button key={r} onClick={() => setVideoResolution(r)} style={choiceButtonStyle(videoResolution === r)}>
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={panelStyle}>
+                  {videoStatus ? (
+                    <div
+                      style={{
+                        marginBottom: 12,
+                        fontSize: 12,
+                        color: videoStatus.includes("失敗") || videoStatus.includes("エラー") ? "#e06060" : "#4a8a6a",
+                        background: "rgba(0,0,0,0.06)",
+                        borderRadius: 8,
+                        padding: "8px 12px",
+                      }}
+                    >
+                      {videoStatus}
+                    </div>
+                  ) : null}
+                  <button
+                    onClick={() => void submitVideo()}
+                    disabled={!videoFile || videoLoading}
+                    style={{
+                      ...actionButtonStyle,
+                      width: "100%",
+                      opacity: !videoFile || videoLoading ? 0.5 : 1,
+                      cursor: !videoFile || videoLoading ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {videoLoading ? "生成中..." : "動画を生成する"}
+                  </button>
+                  <div style={{ marginTop: 8, fontSize: 11, color: "#6a6258", textAlign: "center" }}>
+                    推定コスト: ${(videoDuration * (videoModel === "grok" ? (videoResolution === "480p" ? 0.05 : 0.07) : 0.242)).toFixed(2)}
+                  </div>
+                </div>
               </div>
             </div>
           ) : null}
