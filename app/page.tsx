@@ -378,7 +378,7 @@ export default function Home() {
         </div>
 
         <div className="main-content" style={{ flex: 1, padding: 24, overflowY: "auto" }}>
-          {tab !== "mosaic" && tab !== "video"
+          {(tab === "generate" || tab === "avatar" || tab === "edit" || tab === "history" || tab === "plan")
             ? renderPlaceholder(
                 NAV_ITEMS.find(item => item.id === tab)?.label ?? "LUMIVEIL",
                 "この画面は順次移植中です。まずはモザイク機能を安定させ、MediaPipe Face Landmarker と微調整UIを優先しています。"
