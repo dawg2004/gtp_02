@@ -7,6 +7,11 @@ const MODEL_IDS: Record<string, string> = {
   seedance: "bytedance/seedance-2.0/fast/image-to-video",
 };
 
+const REQUEST_IDS: Record<string, string> = {
+  grok: "xai/grok-imagine-video",
+  seedance: "bytedance/seedance-2.0/fast",
+};
+
 async function fileToDataUri(file: File): Promise<string> {
   const buffer = Buffer.from(await file.arrayBuffer());
   const contentType = file.type || "image/jpeg";
@@ -92,20 +97,28 @@ export async function GET(req: NextRequest) {
   if (!modelId) {
     return NextResponse.json({ error: "invalid model" }, { status: 400 });
   }
+  const requestModelId = REQUEST_IDS[model];
 
   try {
     const statusRes = await fetch(
-      `https://queue.fal.run/${modelId}/requests/${requestId}/status`,
+      `https://queue.fal.run/${requestModelId}/requests/${requestId}/status`,
       { headers: { Authorization: `Key ${FAL_KEY}` } }
     );
-    if (!statusRes.ok) throw new Error("status check failed");
+    if (!statusRes.ok) {
+      const text = await statusRes.text();
+      throw new Error(`status check failed: ${statusRes.status} ${text}`);
+    }
     const statusData = await statusRes.json();
 
     if (statusData.status === "COMPLETED") {
       const resultRes = await fetch(
-        `https://queue.fal.run/${modelId}/requests/${requestId}`,
+        `https://queue.fal.run/${requestModelId}/requests/${requestId}`,
         { headers: { Authorization: `Key ${FAL_KEY}` } }
       );
+      if (!resultRes.ok) {
+        const text = await resultRes.text();
+        throw new Error(`result fetch failed: ${resultRes.status} ${text}`);
+      }
       const result = await resultRes.json();
       return NextResponse.json({ status: "completed", videoUrl: result.video?.url });
     }
