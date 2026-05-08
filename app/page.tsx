@@ -33,6 +33,8 @@ const AREAS = ["顔全体", "目元のみ", "口元のみ"] as const;
 const STRENGTHS = ["弱", "中", "強", "最強"] as const;
 const NUDGE_STEP = 2;
 const RESIZE_STEP = 4;
+const PHOTO_CREDITS_ESTIMATE = 1;
+const VIDEO_CREDITS_ESTIMATE = 8;
 const TOPUP_PACKS: Array<{ id: TopupPackId; name: string; credits: number; price: number; caption: string }> = [
   { id: "starter", name: "スターター", credits: 100, price: 1000, caption: "まず試したい方向け" },
   { id: "standard", name: "スタンダード", credits: 330, price: 3000, caption: "日常運用にちょうどいい" },
@@ -644,6 +646,7 @@ export default function Home() {
                     <div style={{ fontSize: 22, fontWeight: 500, color: "#171717", marginBottom: 6 }}>クレジットチャージ</div>
                     <div style={{ fontSize: 12, color: "#4e4a43", lineHeight: 1.7 }}>
                       画像生成、AI編集、動画生成、キャスト登録に使うクレジットを追加できます。
+                      目安は写真1枚あたり約{PHOTO_CREDITS_ESTIMATE}クレジット、動画1本あたり約{VIDEO_CREDITS_ESTIMATE}クレジットです。
                     </div>
                   </div>
                   <div style={{ minWidth: 140, padding: "10px 12px", borderRadius: 8, background: "rgba(0,0,0,0.07)", border: "1px solid #a89e8e" }}>
@@ -681,6 +684,19 @@ export default function Home() {
                         {pack.credits.toLocaleString("ja-JP")}
                       </div>
                       <div style={{ fontSize: 11, color: "#6a6258", marginTop: 4 }}>クレジット</div>
+                      <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 8, background: "rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.08)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12, color: "#171717", marginBottom: 6 }}>
+                          <span>写真</span>
+                          <strong style={{ fontWeight: 500 }}>約{Math.floor(pack.credits / PHOTO_CREDITS_ESTIMATE).toLocaleString("ja-JP")}枚</strong>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12, color: "#171717" }}>
+                          <span>動画</span>
+                          <strong style={{ fontWeight: 500 }}>約{Math.floor(pack.credits / VIDEO_CREDITS_ESTIMATE).toLocaleString("ja-JP")}本</strong>
+                        </div>
+                        <div style={{ marginTop: 6, fontSize: 10, color: "#6a6258", lineHeight: 1.5 }}>
+                          動画はGrok 5秒生成の概算
+                        </div>
+                      </div>
                       <div style={{ marginTop: "auto", paddingTop: 18 }}>
                         <div style={{ fontSize: 16, fontWeight: 500, color: "#111", marginBottom: 10 }}>
                           ¥{pack.price.toLocaleString("ja-JP")}
