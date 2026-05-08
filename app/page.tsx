@@ -18,6 +18,14 @@ type RegisteredAvatar = {
   created_at: string;
   status: string;
 };
+type GenerationHistoryItem = {
+  id: string;
+  avatar_id: string | null;
+  prompt: string | null;
+  generated_image_url: string;
+  credits_used: number | null;
+  created_at: string;
+};
 
 const NAV_ITEMS: Array<{ id: TabId; label: string; mobileLabel: string; icon: string }> = [
   { id: "generate", label: "画像生成（工事中）", mobileLabel: "生成", icon: "*" },
@@ -80,6 +88,9 @@ export default function Home() {
   const [credits, setCredits] = useState<number | null>(null);
   const [topupLoadingPack, setTopupLoadingPack] = useState<TopupPackId | null>(null);
   const [topupStatus, setTopupStatus] = useState("");
+  const [historyItems, setHistoryItems] = useState<GenerationHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyStatus, setHistoryStatus] = useState("");
 
   const buildRegionBox = useCallback((regions: FaceRegions, area: (typeof AREAS)[number]) => {
     if (area === "目元のみ") {
@@ -330,6 +341,37 @@ export default function Home() {
     }
   }, [getAuthToken]);
 
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryStatus("");
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        setHistoryItems([]);
+        setHistoryStatus("ログインしてから履歴を確認してください。");
+        return;
+      }
+
+      const res = await fetch("/api/history", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        if (res.status === 401) {
+          throw new Error("ログイン状態が切れています。もう一度ログインしてください。");
+        }
+        throw new Error(data.error ?? "履歴を取得できませんでした");
+      }
+
+      setHistoryItems(data.history ?? []);
+    } catch (error) {
+      setHistoryItems([]);
+      setHistoryStatus(error instanceof Error ? error.message : "履歴を取得できませんでした");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [getAuthToken]);
+
   const startTopupCheckout = useCallback(async (packId: TopupPackId) => {
     setTopupLoadingPack(packId);
     setTopupStatus("PayPal決済ページを準備中...");
@@ -552,6 +594,12 @@ export default function Home() {
   }, [loadAvatars, tab]);
 
   useEffect(() => {
+    if (tab === "history") {
+      void loadHistory();
+    }
+  }, [loadHistory, tab]);
+
+  useEffect(() => {
     void loadCredits();
   }, [loadCredits]);
 
@@ -693,12 +741,131 @@ export default function Home() {
             ))}
           </div>
 
-          {(tab === "generate" || tab === "history")
+          {tab === "generate"
             ? renderPlaceholder(
                 NAV_ITEMS.find(item => item.id === tab)?.label ?? "LUMIVEIL",
                 "この画面は順次移植中です。まずはモザイク機能を安定させ、MediaPipe Face Landmarker と微調整UIを優先しています。"
               )
             : null}
+
+          {tab === "history" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={panelStyle}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={sectionLabelStyle}>生成履歴</div>
+                    <div style={{ fontSize: 20, fontWeight: 500, color: "#171717", marginBottom: 6 }}>生成した画像</div>
+                    <div style={{ fontSize: 12, color: "#4e4a43", lineHeight: 1.7 }}>
+                      アカウントに紐づいた画像生成の結果を新しい順に表示します。
+                    </div>
+                  </div>
+                  <button onClick={() => void loadHistory()} disabled={historyLoading} style={smallButtonStyle}>
+                    {historyLoading ? "更新中..." : "更新"}
+                  </button>
+                </div>
+              </div>
+
+              {historyStatus ? (
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    background: "rgba(201,168,76,0.14)",
+                    border: "1px solid rgba(201,168,76,0.35)",
+                    color: historyStatus.includes("ログイン") || historyStatus.includes("取得できません") ? "#b84242" : "#6f5310",
+                    fontSize: 12,
+                    fontWeight: 500,
+                  }}
+                >
+                  {historyStatus}
+                </div>
+              ) : null}
+
+              {historyLoading ? (
+                <div style={panelStyle}>
+                  <div style={{ minHeight: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "#5f5648", fontSize: 13 }}>
+                    履歴を読み込み中...
+                  </div>
+                </div>
+              ) : historyItems.length > 0 ? (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 14 }}>
+                  {historyItems.map(item => (
+                    <div key={item.id} style={{ ...panelStyle, padding: 0, overflow: "hidden" }}>
+                      <a
+                        href={item.generated_image_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ display: "block", aspectRatio: "3 / 4", background: "#111", overflow: "hidden" }}
+                      >
+                        <img
+                          src={item.generated_image_url}
+                          alt={item.prompt ?? "生成画像"}
+                          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                        />
+                      </a>
+                      <div style={{ padding: 12 }}>
+                        <div style={{ fontSize: 11, color: "#6a6258", marginBottom: 8 }}>
+                          {new Date(item.created_at).toLocaleString("ja-JP", {
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </div>
+                        <div
+                          style={{
+                            minHeight: 42,
+                            color: "#171717",
+                            fontSize: 12,
+                            lineHeight: 1.6,
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {item.prompt || "プロンプトなし"}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 12 }}>
+                          <span style={{ fontSize: 11, color: "#6a6258" }}>
+                            {item.credits_used ?? 1} credit
+                          </span>
+                          <a
+                            href={item.generated_image_url}
+                            download
+                            style={{ ...smallButtonStyle, textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+                          >
+                            保存
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={panelStyle}>
+                  <div
+                    style={{
+                      minHeight: 260,
+                      borderRadius: 12,
+                      border: "1px dashed #9b927f",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#5f5648",
+                      background: "rgba(0,0,0,0.03)",
+                      fontSize: 13,
+                      textAlign: "center",
+                      padding: 20,
+                    }}
+                  >
+                    まだ生成履歴はありません。
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
 
           {tab === "plan" ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

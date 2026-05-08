@@ -18,10 +18,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "imageUrlとpromptは必須です" }, { status: 400 });
     }
 
+    const { data: shop } = await supabase
+      .from("shops")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
     const generatedUrl = await generateImage(imageUrl, prompt, background);
 
     await supabase.from("generation_history").insert({
-      shop_id: user.id,
+      shop_id: shop?.id ?? user.id,
       avatar_id: avatarId || null,
       prompt,
       generated_image_url: generatedUrl,
