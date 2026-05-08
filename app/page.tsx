@@ -17,6 +17,7 @@ type RegisteredAvatar = {
   created_at: string;
   status: string;
 };
+type TopupPackId = "starter" | "standard" | "pro" | "bulk";
 
 const NAV_ITEMS: Array<{ id: TabId; label: string; mobileLabel: string; icon: string }> = [
   { id: "generate", label: "画像生成（工事中）", mobileLabel: "生成", icon: "*" },
@@ -32,6 +33,12 @@ const AREAS = ["顔全体", "目元のみ", "口元のみ"] as const;
 const STRENGTHS = ["弱", "中", "強", "最強"] as const;
 const NUDGE_STEP = 2;
 const RESIZE_STEP = 4;
+const TOPUP_PACKS: Array<{ id: TopupPackId; name: string; credits: number; price: number; caption: string }> = [
+  { id: "starter", name: "スターター", credits: 100, price: 1000, caption: "まず試したい方向け" },
+  { id: "standard", name: "スタンダード", credits: 330, price: 3000, caption: "日常運用にちょうどいい" },
+  { id: "pro", name: "プロ", credits: 580, price: 5000, caption: "編集・動画も使う方向け" },
+  { id: "bulk", name: "まとめ買い", credits: 1200, price: 10000, caption: "単価を抑えて多めに確保" },
+];
 
 export default function Home() {
   const [tab, setTab] = useState<TabId>("mosaic");
@@ -72,6 +79,9 @@ export default function Home() {
   const [videoRequestId, setVideoRequestId] = useState<string | null>(null);
   const [videoStatus, setVideoStatus] = useState("");
   const videoPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [credits, setCredits] = useState<number | null>(null);
+  const [topupLoadingPack, setTopupLoadingPack] = useState<TopupPackId | null>(null);
+  const [topupStatus, setTopupStatus] = useState("");
 
   const buildRegionBox = useCallback((regions: FaceRegions, area: (typeof AREAS)[number]) => {
     if (area === "目元のみ") {
@@ -291,6 +301,54 @@ export default function Home() {
     return data.session?.access_token ?? null;
   }, []);
 
+  const loadCredits = useCallback(async () => {
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+
+      const res = await fetch("/api/credits", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error ?? "クレジット残高を取得できませんでした");
+      }
+
+      setCredits(Number(data.credits ?? 0));
+    } catch {
+      setCredits(null);
+    }
+  }, [getAuthToken]);
+
+  const startTopupCheckout = useCallback(async (packId: TopupPackId) => {
+    setTopupLoadingPack(packId);
+    setTopupStatus("Stripe Checkout を準備中...");
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error("ログインが必要です。");
+      }
+
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ type: "topup", packId }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error ?? "決済ページを作成できませんでした");
+      }
+
+      window.location.href = data.url;
+    } catch (error) {
+      setTopupStatus(error instanceof Error ? error.message : "決済ページを作成できませんでした");
+      setTopupLoadingPack(null);
+    }
+  }, [getAuthToken]);
+
   const loadAvatars = useCallback(async () => {
     setAvatarListLoading(true);
     try {
@@ -480,6 +538,10 @@ export default function Home() {
     }
   }, [loadAvatars, tab]);
 
+  useEffect(() => {
+    void loadCredits();
+  }, [loadCredits]);
+
   const renderPlaceholder = (title: string, body: string) => (
     <div style={panelStyle}>
       <div style={{ fontSize: 18, fontWeight: 700, color: "#f0ece4", marginBottom: 12 }}>{title}</div>
@@ -510,7 +572,7 @@ export default function Home() {
           <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: "0.1em" }}>LUMIVEIL</span>
         </div>
         <div style={{ background: "rgba(201,168,76,0.1)", border: "1px solid rgba(201,168,76,0.25)", borderRadius: 999, padding: "3px 10px", fontSize: 11, color: "#c9a84c" }}>
-          ◆ 487 クレジット
+          ◆ {credits == null ? "--" : credits.toLocaleString("ja-JP")} クレジット
         </div>
       </div>
 
@@ -566,12 +628,82 @@ export default function Home() {
             ))}
           </div>
 
-          {(tab === "generate" || tab === "history" || tab === "plan")
+          {(tab === "generate" || tab === "history")
             ? renderPlaceholder(
                 NAV_ITEMS.find(item => item.id === tab)?.label ?? "LUMIVEIL",
                 "この画面は順次移植中です。まずはモザイク機能を安定させ、MediaPipe Face Landmarker と微調整UIを優先しています。"
               )
             : null}
+
+          {tab === "plan" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={panelStyle}>
+                <div style={sectionLabelStyle}>クレジット</div>
+                <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: "#171717", marginBottom: 6 }}>クレジットチャージ</div>
+                    <div style={{ fontSize: 12, color: "#4e4a43", lineHeight: 1.7 }}>
+                      画像生成、AI編集、動画生成、キャスト登録に使うクレジットを追加できます。
+                    </div>
+                  </div>
+                  <div style={{ minWidth: 140, padding: "10px 12px", borderRadius: 8, background: "rgba(0,0,0,0.07)", border: "1px solid #a89e8e" }}>
+                    <div style={{ fontSize: 10, color: "#6a6258", fontWeight: 700, marginBottom: 4 }}>現在の残高</div>
+                    <div style={{ fontSize: 20, color: "#111", fontWeight: 900 }}>
+                      {credits == null ? "--" : credits.toLocaleString("ja-JP")}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {topupStatus ? (
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    background: "rgba(201,168,76,0.14)",
+                    border: "1px solid rgba(201,168,76,0.35)",
+                    color: topupStatus.includes("必要") || topupStatus.includes("できません") ? "#b84242" : "#6f5310",
+                    fontSize: 12,
+                    fontWeight: 700,
+                  }}
+                >
+                  {topupStatus}
+                </div>
+              ) : null}
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14 }}>
+                {TOPUP_PACKS.map(pack => (
+                  <div key={pack.id} style={panelStyle}>
+                    <div style={{ display: "flex", flexDirection: "column", minHeight: 168 }}>
+                      <div style={sectionLabelStyle}>{pack.caption}</div>
+                      <div style={{ fontSize: 18, fontWeight: 900, color: "#171717", marginBottom: 8 }}>{pack.name}</div>
+                      <div style={{ fontSize: 28, fontWeight: 900, color: "#111", lineHeight: 1 }}>
+                        {pack.credits.toLocaleString("ja-JP")}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#6a6258", marginTop: 4 }}>クレジット</div>
+                      <div style={{ marginTop: "auto", paddingTop: 18 }}>
+                        <div style={{ fontSize: 16, fontWeight: 900, color: "#111", marginBottom: 10 }}>
+                          ¥{pack.price.toLocaleString("ja-JP")}
+                        </div>
+                        <button
+                          onClick={() => void startTopupCheckout(pack.id)}
+                          disabled={topupLoadingPack != null}
+                          style={{
+                            ...actionButtonStyle,
+                            width: "100%",
+                            opacity: topupLoadingPack != null ? 0.55 : 1,
+                            cursor: topupLoadingPack != null ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {topupLoadingPack === pack.id ? "準備中..." : "チャージする"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {tab === "avatar" ? (
             <div className="layout-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>

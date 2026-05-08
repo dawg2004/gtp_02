@@ -36,6 +36,41 @@ export async function POST(req: NextRequest) {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
+      if (session.metadata?.type === "topup") {
+        const userId = session.metadata.userId;
+        const credits = Number(session.metadata.credits ?? 0);
+        const packId = session.metadata.packId ?? "topup";
+        if (!userId || !credits) break;
+
+        if (await isAlreadyProcessed(session.id)) break;
+
+        const { data: shop } = await supabase
+          .from("shops").select("id, credits").eq("user_id", userId).single();
+
+        if (shop) {
+          const nextCredits = Number(shop.credits ?? 0) + credits;
+          await supabase.from("shops").update({ credits: nextCredits }).eq("id", shop.id);
+          await supabase.from("credit_transactions").insert({
+            shop_id: shop.id, type: "topup",
+            amount: credits, description: `${packId}クレジットチャージ`,
+            stripe_id: session.id,
+          });
+        } else {
+          const { data: newShop } = await supabase.from("shops").insert({
+            user_id: userId, name: "新規店舗", plan: "free", credits,
+          }).select("id").single();
+
+          if (newShop) {
+            await supabase.from("credit_transactions").insert({
+              shop_id: newShop.id, type: "topup",
+              amount: credits, description: `${packId}クレジットチャージ`,
+              stripe_id: session.id,
+            });
+          }
+        }
+        break;
+      }
+
       const userId = session.metadata?.userId;
       const plan = session.metadata?.plan;
       if (!userId || !plan) break;
