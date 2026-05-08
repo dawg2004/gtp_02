@@ -1,6 +1,7 @@
 "use client";
 
 import { detectFaceRegions, type FacePoint, type FaceRegions } from "@/lib/faceDetector";
+import { createClient } from "@/lib/supabase";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 
 type TabId = "generate" | "avatar" | "mosaic" | "edit" | "video" | "history" | "plan";
@@ -9,6 +10,13 @@ type ImageSize = { width: number; height: number };
 type MosaicMode = "blur" | "gaussian" | "simple";
 type VideoModel = "grok" | "seedance";
 type EditResolution = "1k" | "2k";
+type RegisteredAvatar = {
+  id: string;
+  name: string;
+  face_image_url: string | null;
+  created_at: string;
+  status: string;
+};
 
 const NAV_ITEMS: Array<{ id: TabId; label: string; mobileLabel: string; icon: string }> = [
   { id: "generate", label: "画像生成（工事中）", mobileLabel: "生成", icon: "*" },
@@ -36,6 +44,14 @@ export default function Home() {
   const [mosaicStrength, setMosaicStrength] = useState<(typeof STRENGTHS)[number]>("中");
   const [mosaicStage, setMosaicStage] = useState("");
   const [mosaicLoading, setMosaicLoading] = useState(false);
+
+  const [avatarName, setAvatarName] = useState("");
+  const [avatarFiles, setAvatarFiles] = useState<File[]>([]);
+  const [avatarPreviews, setAvatarPreviews] = useState<string[]>([]);
+  const [avatarLoading, setAvatarLoading] = useState(false);
+  const [avatarStatus, setAvatarStatus] = useState("");
+  const [avatars, setAvatars] = useState<RegisteredAvatar[]>([]);
+  const [avatarListLoading, setAvatarListLoading] = useState(false);
 
   const [editFile, setEditFile] = useState<File | null>(null);
   const [editSrc, setEditSrc] = useState<string | null>(null);
@@ -269,6 +285,97 @@ export default function Home() {
     [buildAdjustedPolygon, mosaicArea, mosaicBox, mosaicRegions, mosaicSrc, mosaicStrength]
   );
 
+  const getAuthToken = useCallback(async () => {
+    const supabase = createClient();
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? null;
+  }, []);
+
+  const loadAvatars = useCallback(async () => {
+    setAvatarListLoading(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        setAvatarStatus("ログインが必要です。");
+        return;
+      }
+
+      const res = await fetch("/api/avatar", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error ?? "キャスト一覧を取得できませんでした");
+      }
+
+      setAvatars(data.avatars ?? []);
+    } catch (error) {
+      setAvatarStatus(error instanceof Error ? error.message : "キャスト一覧を取得できませんでした");
+    } finally {
+      setAvatarListLoading(false);
+    }
+  }, [getAuthToken]);
+
+  const handleAvatarFiles = useCallback((files: FileList | null) => {
+    const selected = Array.from(files ?? []).filter(file => file.type.startsWith("image/"));
+    setAvatarFiles(selected);
+    setAvatarPreviews(current => {
+      current.forEach(url => URL.revokeObjectURL(url));
+      return selected.map(file => URL.createObjectURL(file));
+    });
+    setAvatarStatus("");
+  }, []);
+
+  const submitAvatar = useCallback(async () => {
+    if (!avatarName.trim() || avatarFiles.length === 0) return;
+
+    setAvatarLoading(true);
+    setAvatarStatus("キャストを登録中...");
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error("ログインが必要です。");
+      }
+
+      const formData = new FormData();
+      formData.append("castName", avatarName.trim());
+      avatarFiles.forEach(file => formData.append("photos", file));
+
+      const res = await fetch("/api/avatar", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error ?? "キャスト登録に失敗しました");
+      }
+
+      setAvatarName("");
+      setAvatarFiles([]);
+      setAvatarPreviews(current => {
+        current.forEach(url => URL.revokeObjectURL(url));
+        return [];
+      });
+      setAvatarStatus("キャストを登録しました。");
+      await loadAvatars();
+    } catch (error) {
+      setAvatarStatus(error instanceof Error ? error.message : "キャスト登録に失敗しました");
+    } finally {
+      setAvatarLoading(false);
+    }
+  }, [avatarFiles, avatarName, getAuthToken, loadAvatars]);
+
+  const resetAvatarForm = useCallback(() => {
+    setAvatarName("");
+    setAvatarFiles([]);
+    setAvatarStatus("");
+    setAvatarPreviews(current => {
+      current.forEach(url => URL.revokeObjectURL(url));
+      return [];
+    });
+  }, []);
+
   const handleVideoUpload = useCallback((file: File) => {
     setVideoFile(file);
     setVideoSrc(URL.createObjectURL(file));
@@ -367,6 +474,12 @@ export default function Home() {
     return () => { if (videoPollRef.current) clearInterval(videoPollRef.current); };
   }, [videoRequestId, videoModel]);
 
+  useEffect(() => {
+    if (tab === "avatar") {
+      void loadAvatars();
+    }
+  }, [loadAvatars, tab]);
+
   const renderPlaceholder = (title: string, body: string) => (
     <div style={panelStyle}>
       <div style={{ fontSize: 18, fontWeight: 700, color: "#f0ece4", marginBottom: 12 }}>{title}</div>
@@ -453,12 +566,170 @@ export default function Home() {
             ))}
           </div>
 
-          {(tab === "generate" || tab === "avatar" || tab === "history" || tab === "plan")
+          {(tab === "generate" || tab === "history" || tab === "plan")
             ? renderPlaceholder(
                 NAV_ITEMS.find(item => item.id === tab)?.label ?? "LUMIVEIL",
                 "この画面は順次移植中です。まずはモザイク機能を安定させ、MediaPipe Face Landmarker と微調整UIを優先しています。"
               )
             : null}
+
+          {tab === "avatar" ? (
+            <div className="layout-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+              <div style={panelStyle}>
+                <div style={sectionLabelStyle}>キャスト情報</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "#171717", marginBottom: 14 }}>キャスト登録</div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <span style={sectionLabelStyle}>キャスト名</span>
+                    <input
+                      value={avatarName}
+                      onChange={event => setAvatarName(event.target.value)}
+                      placeholder="例: LUXE WAVE"
+                      style={{
+                        width: "100%",
+                        padding: "11px 12px",
+                        borderRadius: 8,
+                        border: "1px solid #a89e8e",
+                        background: "rgba(0,0,0,0.06)",
+                        color: "#111",
+                        fontSize: 13,
+                        fontFamily: "inherit",
+                        outline: "none",
+                      }}
+                    />
+                  </label>
+
+                  <div>
+                    <div style={sectionLabelStyle}>写真</div>
+                    <label style={uploadButtonStyle}>
+                      写真を選択する
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        style={{ display: "none" }}
+                        onChange={event => handleAvatarFiles(event.target.files)}
+                      />
+                    </label>
+                    <div style={{ marginTop: 8, fontSize: 11, color: "#6a6258" }}>
+                      正面が分かる写真を1枚以上アップロードしてください。登録には50クレジット使用します。
+                    </div>
+                  </div>
+
+                  {avatarPreviews.length > 0 ? (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))", gap: 10 }}>
+                      {avatarPreviews.map((src, index) => (
+                        <div key={src} style={{ borderRadius: 10, overflow: "hidden", background: "#000", border: "1px solid rgba(0,0,0,0.16)", aspectRatio: "1 / 1" }}>
+                          <img src={src} alt={`登録写真 ${index + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        minHeight: 180,
+                        borderRadius: 12,
+                        border: "1px dashed #9b927f",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#5f5648",
+                        background: "rgba(0,0,0,0.03)",
+                        fontSize: 13,
+                      }}
+                    >
+                      選択した写真のプレビューが表示されます。
+                    </div>
+                  )}
+
+                  {avatarStatus ? (
+                    <div
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 8,
+                        background: "rgba(0,0,0,0.06)",
+                        color: avatarStatus.includes("失敗") || avatarStatus.includes("不足") || avatarStatus.includes("必要") ? "#b84242" : "#4a7c50",
+                        fontSize: 12,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {avatarStatus}
+                    </div>
+                  ) : null}
+
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button
+                      onClick={() => void submitAvatar()}
+                      disabled={!avatarName.trim() || avatarFiles.length === 0 || avatarLoading}
+                      style={{
+                        ...actionButtonStyle,
+                        opacity: !avatarName.trim() || avatarFiles.length === 0 || avatarLoading ? 0.5 : 1,
+                        cursor: !avatarName.trim() || avatarFiles.length === 0 || avatarLoading ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {avatarLoading ? "登録中..." : "登録する"}
+                    </button>
+                    <button onClick={resetAvatarForm} style={{ ...smallButtonStyle, flex: 1 }}>
+                      リセット
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div style={panelStyle}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
+                  <div>
+                    <div style={sectionLabelStyle}>登録済み</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: "#171717" }}>キャスト一覧</div>
+                  </div>
+                  <button onClick={() => void loadAvatars()} style={smallButtonStyle} disabled={avatarListLoading}>
+                    更新
+                  </button>
+                </div>
+
+                {avatarListLoading ? (
+                  <div style={{ fontSize: 13, color: "#5f5648" }}>読み込み中...</div>
+                ) : avatars.length > 0 ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 }}>
+                    {avatars.map(avatar => (
+                      <div key={avatar.id} style={{ borderRadius: 10, overflow: "hidden", background: "rgba(0,0,0,0.06)", border: "1px solid #a89e8e" }}>
+                        <div style={{ aspectRatio: "1 / 1", background: "#111" }}>
+                          {avatar.face_image_url ? (
+                            <img src={avatar.face_image_url} alt={avatar.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                          ) : null}
+                        </div>
+                        <div style={{ padding: 10 }}>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: "#111", marginBottom: 4 }}>{avatar.name}</div>
+                          <div style={{ fontSize: 10, color: "#6a6258" }}>
+                            {avatar.status} / {new Date(avatar.created_at).toLocaleDateString("ja-JP")}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      minHeight: 220,
+                      borderRadius: 12,
+                      border: "1px dashed #9b927f",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#5f5648",
+                      background: "rgba(0,0,0,0.03)",
+                      fontSize: 13,
+                      textAlign: "center",
+                      padding: 20,
+                    }}
+                  >
+                    まだ登録済みキャストはありません。
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
 
           {tab === "mosaic" ? (
             <div className="layout-grid" style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: 20 }}>
