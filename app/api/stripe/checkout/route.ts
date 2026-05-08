@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
+import { TOPUP_PACKS, type TopupPackId } from '@/lib/credit-packs'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 const supabase = createClient(
@@ -15,19 +16,12 @@ const PRICE_MAP: Record<string, string> = {
   ULTRA: process.env.NEXT_PUBLIC_STRIPE_PRICE_ULTRA!,
 }
 
-const TOPUP_PACKS: Record<string, { name: string; credits: number; amount: number }> = {
-  starter: { name: 'スターター', credits: 100, amount: 1000 },
-  standard: { name: 'スタンダード', credits: 330, amount: 3000 },
-  pro: { name: 'プロ', credits: 580, amount: 5000 },
-  bulk: { name: 'まとめ買い', credits: 1200, amount: 10000 },
-}
-
 export async function POST(request: NextRequest) {
   try {
     const { priceId, type, packId } = await request.json()
 
     if (type === 'topup') {
-      const pack = TOPUP_PACKS[packId]
+      const pack = TOPUP_PACKS[packId as TopupPackId]
       if (!pack) {
         return NextResponse.json({ error: '無効なチャージパックです' }, { status: 400 })
       }

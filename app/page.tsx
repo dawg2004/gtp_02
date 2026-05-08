@@ -1,6 +1,7 @@
 "use client";
 
 import { detectFaceRegions, type FacePoint, type FaceRegions } from "@/lib/faceDetector";
+import { TOPUP_PACKS, type TopupPackId } from "@/lib/credit-packs";
 import { createClient } from "@/lib/supabase";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 
@@ -17,7 +18,6 @@ type RegisteredAvatar = {
   created_at: string;
   status: string;
 };
-type TopupPackId = "starter" | "standard" | "pro" | "bulk";
 
 const NAV_ITEMS: Array<{ id: TabId; label: string; mobileLabel: string; icon: string }> = [
   { id: "generate", label: "画像生成（工事中）", mobileLabel: "生成", icon: "*" },
@@ -35,12 +35,7 @@ const NUDGE_STEP = 2;
 const RESIZE_STEP = 4;
 const PHOTO_CREDITS_ESTIMATE = 1;
 const VIDEO_CREDITS_ESTIMATE = 8;
-const TOPUP_PACKS: Array<{ id: TopupPackId; name: string; credits: number; price: number; caption: string }> = [
-  { id: "starter", name: "スターター", credits: 100, price: 1000, caption: "まず試したい方向け" },
-  { id: "standard", name: "スタンダード", credits: 330, price: 3000, caption: "日常運用にちょうどいい" },
-  { id: "pro", name: "プロ", credits: 580, price: 5000, caption: "編集・動画も使う方向け" },
-  { id: "bulk", name: "まとめ買い", credits: 1200, price: 10000, caption: "単価を抑えて多めに確保" },
-];
+const TOPUP_PACK_LIST = Object.entries(TOPUP_PACKS).map(([id, pack]) => ({ id: id as TopupPackId, ...pack }));
 
 export default function Home() {
   const [tab, setTab] = useState<TabId>("mosaic");
@@ -81,6 +76,7 @@ export default function Home() {
   const [videoRequestId, setVideoRequestId] = useState<string | null>(null);
   const [videoStatus, setVideoStatus] = useState("");
   const videoPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const paypalCaptureStartedRef = useRef(false);
   const [credits, setCredits] = useState<number | null>(null);
   const [topupLoadingPack, setTopupLoadingPack] = useState<TopupPackId | null>(null);
   const [topupStatus, setTopupStatus] = useState("");
@@ -324,29 +320,29 @@ export default function Home() {
 
   const startTopupCheckout = useCallback(async (packId: TopupPackId) => {
     setTopupLoadingPack(packId);
-    setTopupStatus("Stripe Checkout を準備中...");
+    setTopupStatus("PayPal決済ページを準備中...");
     try {
       const token = await getAuthToken();
       if (!token) {
         throw new Error("ログインが必要です。");
       }
 
-      const res = await fetch("/api/stripe/checkout", {
+      const res = await fetch("/api/paypal/create-order", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ type: "topup", packId }),
+        body: JSON.stringify({ packId }),
       });
       const data = await res.json();
       if (!res.ok || data.error) {
-        throw new Error(data.error ?? "決済ページを作成できませんでした");
+        throw new Error(data.error ?? "PayPal決済ページを作成できませんでした");
       }
 
       window.location.href = data.url;
     } catch (error) {
-      setTopupStatus(error instanceof Error ? error.message : "決済ページを作成できませんでした");
+      setTopupStatus(error instanceof Error ? error.message : "PayPal決済ページを作成できませんでした");
       setTopupLoadingPack(null);
     }
   }, [getAuthToken]);
@@ -544,6 +540,55 @@ export default function Home() {
     void loadCredits();
   }, [loadCredits]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paypalStatus = params.get("paypal");
+    const orderId = params.get("token");
+
+    if (paypalStatus === "canceled") {
+      setTab("plan");
+      setTopupStatus("PayPal決済をキャンセルしました。");
+      window.history.replaceState({}, "", window.location.pathname);
+      return;
+    }
+
+    if (paypalStatus !== "success" || !orderId || paypalCaptureStartedRef.current) {
+      return;
+    }
+
+    paypalCaptureStartedRef.current = true;
+    setTab("plan");
+    setTopupStatus("PayPal決済を確認中...");
+
+    void (async () => {
+      try {
+        const token = await getAuthToken();
+        if (!token) {
+          throw new Error("ログインが必要です。");
+        }
+
+        const res = await fetch("/api/paypal/capture-order", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ orderId }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          throw new Error(data.error ?? "PayPal決済の確定に失敗しました");
+        }
+
+        setCredits(Number(data.credits ?? 0));
+        setTopupStatus(data.alreadyProcessed ? "このPayPal決済は反映済みです。" : "PayPalチャージが完了しました。");
+        window.history.replaceState({}, "", window.location.pathname);
+      } catch (error) {
+        setTopupStatus(error instanceof Error ? error.message : "PayPal決済の確定に失敗しました");
+      }
+    })();
+  }, [getAuthToken]);
+
   const renderPlaceholder = (title: string, body: string) => (
     <div style={panelStyle}>
       <div style={{ fontSize: 18, fontWeight: 500, color: "#f0ece4", marginBottom: 12 }}>{title}</div>
@@ -675,7 +720,7 @@ export default function Home() {
               ) : null}
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14 }}>
-                {TOPUP_PACKS.map(pack => (
+                {TOPUP_PACK_LIST.map(pack => (
                   <div key={pack.id} style={panelStyle}>
                     <div style={{ display: "flex", flexDirection: "column", minHeight: 168 }}>
                       <div style={sectionLabelStyle}>{pack.caption}</div>
@@ -699,7 +744,7 @@ export default function Home() {
                       </div>
                       <div style={{ marginTop: "auto", paddingTop: 18 }}>
                         <div style={{ fontSize: 16, fontWeight: 500, color: "#111", marginBottom: 10 }}>
-                          ¥{pack.price.toLocaleString("ja-JP")}
+                          ¥{pack.amount.toLocaleString("ja-JP")}
                         </div>
                         <button
                           onClick={() => void startTopupCheckout(pack.id)}
@@ -711,7 +756,7 @@ export default function Home() {
                             cursor: topupLoadingPack != null ? "not-allowed" : "pointer",
                           }}
                         >
-                          {topupLoadingPack === pack.id ? "準備中..." : "チャージする"}
+                          {topupLoadingPack === pack.id ? "準備中..." : "PayPalでチャージ"}
                         </button>
                       </div>
                     </div>
