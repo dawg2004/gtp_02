@@ -17,9 +17,13 @@ export async function POST(req: NextRequest) {
     }
 
     const token = req.headers.get("authorization")?.replace("Bearer ", "");
+    if (!token) {
+      return NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
+    }
+
     const { data: { user }, error: authError } = await supabase.auth.getUser(token!);
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "ログイン状態が切れています。もう一度ログインしてください。" }, { status: 401 });
     }
 
     const order = await createPayPalOrder({

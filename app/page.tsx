@@ -296,7 +296,19 @@ export default function Home() {
   const getAuthToken = useCallback(async () => {
     const supabase = createClient();
     const { data } = await supabase.auth.getSession();
-    return data.session?.access_token ?? null;
+    const now = Math.floor(Date.now() / 1000);
+    const session = data.session;
+
+    if (session?.access_token && (!session.expires_at || session.expires_at > now + 60)) {
+      return session.access_token;
+    }
+
+    const { data: refreshed, error } = await supabase.auth.refreshSession();
+    if (error) {
+      return null;
+    }
+
+    return refreshed.session?.access_token ?? null;
   }, []);
 
   const loadCredits = useCallback(async () => {
@@ -337,6 +349,9 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok || data.error) {
+        if (res.status === 401) {
+          throw new Error("ログイン状態が切れています。もう一度ログインしてからチャージしてください。");
+        }
         throw new Error(data.error ?? "PayPal決済ページを作成できませんでした");
       }
 
@@ -577,6 +592,9 @@ export default function Home() {
         });
         const data = await res.json();
         if (!res.ok || data.error) {
+          if (res.status === 401) {
+            throw new Error("ログイン状態が切れています。もう一度ログインしてからPayPal決済を確定してください。");
+          }
           throw new Error(data.error ?? "PayPal決済の確定に失敗しました");
         }
 
