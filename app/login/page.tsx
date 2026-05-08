@@ -36,6 +36,7 @@ export default function LoginPage() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
+      fontFamily: 'var(--font-lumiveil-sans)',
     }}>
       <div style={{
         background: '#111827',
@@ -46,7 +47,7 @@ export default function LoginPage() {
         maxWidth: '400px',
       }}>
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <div style={{ color: '#c9a84c', fontSize: '24px', fontWeight: 'bold', marginBottom: '8px' }}>
+          <div style={{ color: '#c9a84c', fontSize: '24px', fontWeight: 500, letterSpacing: '0.08em', marginBottom: '8px' }}>
             ✦ LUMIVEIL
           </div>
           <div style={{ color: '#64748b', fontSize: '14px' }}>
@@ -109,7 +110,7 @@ export default function LoginPage() {
             borderRadius: '8px',
             color: '#0a0e1a',
             fontSize: '15px',
-            fontWeight: 'bold',
+            fontWeight: 500,
             cursor: loading ? 'not-allowed' : 'pointer',
             opacity: loading ? 0.7 : 1,
           }}

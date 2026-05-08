@@ -544,13 +544,13 @@ export default function Home() {
 
   const renderPlaceholder = (title: string, body: string) => (
     <div style={panelStyle}>
-      <div style={{ fontSize: 18, fontWeight: 700, color: "#f0ece4", marginBottom: 12 }}>{title}</div>
+      <div style={{ fontSize: 18, fontWeight: 500, color: "#f0ece4", marginBottom: 12 }}>{title}</div>
       <div style={{ fontSize: 13, color: "#b8c0c4", lineHeight: 1.8 }}>{body}</div>
     </div>
   );
 
   return (
-    <div style={{ minHeight: "100vh", background: "#071e28", color: "#f0ece4", fontFamily: "'Hiragino Sans', 'Yu Gothic', sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#071e28", color: "#f0ece4", fontFamily: "var(--font-lumiveil-sans)" }}>
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
         .sidebar { display: flex; }
@@ -568,8 +568,8 @@ export default function Home() {
 
       <div style={{ background: "#071e28", borderBottom: "1px solid #163645", padding: "0 16px", height: 48, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 24, height: 24, background: "#c9a84c", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, color: "#071e28" }}>L</div>
-          <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: "0.1em" }}>LUMIVEIL</span>
+          <div style={{ width: 24, height: 24, background: "#c9a84c", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 500, color: "#071e28" }}>L</div>
+          <span style={{ fontSize: 14, fontWeight: 500, letterSpacing: "0.08em" }}>LUMIVEIL</span>
         </div>
         <div style={{ background: "rgba(201,168,76,0.1)", border: "1px solid rgba(201,168,76,0.25)", borderRadius: 999, padding: "3px 10px", fontSize: 11, color: "#c9a84c" }}>
           ◆ {credits == null ? "--" : credits.toLocaleString("ja-JP")} クレジット
@@ -619,7 +619,7 @@ export default function Home() {
                   color: tab === item.id ? "#071e28" : "#d8dde0",
                   cursor: "pointer",
                   fontSize: 12,
-                  fontWeight: 700,
+                  fontWeight: 500,
                   whiteSpace: "nowrap",
                 }}
               >
@@ -641,14 +641,14 @@ export default function Home() {
                 <div style={sectionLabelStyle}>クレジット</div>
                 <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
                   <div>
-                    <div style={{ fontSize: 22, fontWeight: 900, color: "#171717", marginBottom: 6 }}>クレジットチャージ</div>
+                    <div style={{ fontSize: 22, fontWeight: 500, color: "#171717", marginBottom: 6 }}>クレジットチャージ</div>
                     <div style={{ fontSize: 12, color: "#4e4a43", lineHeight: 1.7 }}>
                       画像生成、AI編集、動画生成、キャスト登録に使うクレジットを追加できます。
                     </div>
                   </div>
                   <div style={{ minWidth: 140, padding: "10px 12px", borderRadius: 8, background: "rgba(0,0,0,0.07)", border: "1px solid #a89e8e" }}>
-                    <div style={{ fontSize: 10, color: "#6a6258", fontWeight: 700, marginBottom: 4 }}>現在の残高</div>
-                    <div style={{ fontSize: 20, color: "#111", fontWeight: 900 }}>
+                    <div style={{ fontSize: 10, color: "#6a6258", fontWeight: 500, marginBottom: 4 }}>現在の残高</div>
+                    <div style={{ fontSize: 20, color: "#111", fontWeight: 500 }}>
                       {credits == null ? "--" : credits.toLocaleString("ja-JP")}
                     </div>
                   </div>
@@ -664,7 +664,7 @@ export default function Home() {
                     border: "1px solid rgba(201,168,76,0.35)",
                     color: topupStatus.includes("必要") || topupStatus.includes("できません") ? "#b84242" : "#6f5310",
                     fontSize: 12,
-                    fontWeight: 700,
+                    fontWeight: 500,
                   }}
                 >
                   {topupStatus}
@@ -676,13 +676,13 @@ export default function Home() {
                   <div key={pack.id} style={panelStyle}>
                     <div style={{ display: "flex", flexDirection: "column", minHeight: 168 }}>
                       <div style={sectionLabelStyle}>{pack.caption}</div>
-                      <div style={{ fontSize: 18, fontWeight: 900, color: "#171717", marginBottom: 8 }}>{pack.name}</div>
-                      <div style={{ fontSize: 28, fontWeight: 900, color: "#111", lineHeight: 1 }}>
+                      <div style={{ fontSize: 18, fontWeight: 500, color: "#171717", marginBottom: 8 }}>{pack.name}</div>
+                      <div style={{ fontSize: 28, fontWeight: 500, color: "#111", lineHeight: 1 }}>
                         {pack.credits.toLocaleString("ja-JP")}
                       </div>
                       <div style={{ fontSize: 11, color: "#6a6258", marginTop: 4 }}>クレジット</div>
                       <div style={{ marginTop: "auto", paddingTop: 18 }}>
-                        <div style={{ fontSize: 16, fontWeight: 900, color: "#111", marginBottom: 10 }}>
+                        <div style={{ fontSize: 16, fontWeight: 500, color: "#111", marginBottom: 10 }}>
                           ¥{pack.price.toLocaleString("ja-JP")}
                         </div>
                         <button
@@ -709,7 +709,7 @@ export default function Home() {
             <div className="layout-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
               <div style={panelStyle}>
                 <div style={sectionLabelStyle}>キャスト情報</div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: "#171717", marginBottom: 14 }}>キャスト登録</div>
+                <div style={{ fontSize: 18, fontWeight: 650, color: "#171717", marginBottom: 14 }}>キャスト登録</div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -783,7 +783,7 @@ export default function Home() {
                         background: "rgba(0,0,0,0.06)",
                         color: avatarStatus.includes("失敗") || avatarStatus.includes("不足") || avatarStatus.includes("必要") ? "#b84242" : "#4a7c50",
                         fontSize: 12,
-                        fontWeight: 700,
+                        fontWeight: 500,
                       }}
                     >
                       {avatarStatus}
@@ -813,7 +813,7 @@ export default function Home() {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
                   <div>
                     <div style={sectionLabelStyle}>登録済み</div>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: "#171717" }}>キャスト一覧</div>
+                    <div style={{ fontSize: 18, fontWeight: 650, color: "#171717" }}>キャスト一覧</div>
                   </div>
                   <button onClick={() => void loadAvatars()} style={smallButtonStyle} disabled={avatarListLoading}>
                     更新
@@ -832,7 +832,7 @@ export default function Home() {
                           ) : null}
                         </div>
                         <div style={{ padding: 10 }}>
-                          <div style={{ fontSize: 13, fontWeight: 800, color: "#111", marginBottom: 4 }}>{avatar.name}</div>
+                          <div style={{ fontSize: 13, fontWeight: 650, color: "#111", marginBottom: 4 }}>{avatar.name}</div>
                           <div style={{ fontSize: 10, color: "#6a6258" }}>
                             {avatar.status} / {new Date(avatar.created_at).toLocaleDateString("ja-JP")}
                           </div>
@@ -931,7 +931,7 @@ export default function Home() {
                       border: "1px solid rgba(201,168,76,0.35)",
                       color: "#6f5310",
                       fontSize: 12,
-                      fontWeight: 700,
+                      fontWeight: 500,
                     }}
                   >
                     {mosaicStage}
@@ -1096,7 +1096,7 @@ export default function Home() {
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 <div style={panelStyle}>
                   <div style={sectionLabelStyle}>モデル</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", marginBottom: 8 }}>Grok Imagine Image Edit</div>
+                  <div style={{ fontSize: 18, fontWeight: 500, color: "#1a1a1a", marginBottom: 8 }}>Grok Imagine Image Edit</div>
                   <div style={{ fontSize: 12, color: "#4e4a43", lineHeight: 1.7 }}>
                     画像をもとに、プロンプトで背景、質感、明るさ、服装や雰囲気などを編集します。
                   </div>
@@ -1336,7 +1336,7 @@ export default function Home() {
             onClick={event => event.stopPropagation()}
             style={{ width: "min(980px, 92vw)", background: "#102733", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14, padding: 18 }}
           >
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#f0ece4", marginBottom: 14 }}>比較表示</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: "#f0ece4", marginBottom: 14 }}>比較表示</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
               <PreviewCard label="加工前" src={mosaicSrc} />
               <PreviewCard label="加工後" src={mosaicImage} />
@@ -1388,7 +1388,7 @@ export default function Home() {
 function PreviewCard({ label, src }: { label: string; src: string }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#c9a84c" }}>{label}</div>
+      <div style={{ fontSize: 12, fontWeight: 500, color: "#c9a84c" }}>{label}</div>
       <div
         style={{
           height: 320,
@@ -1419,7 +1419,7 @@ const sectionLabelStyle: CSSProperties = {
   color: "#444",
   marginBottom: 7,
   letterSpacing: "0.05em",
-  fontWeight: 700,
+  fontWeight: 500,
 };
 
 const uploadButtonStyle: CSSProperties = {
@@ -1433,7 +1433,7 @@ const uploadButtonStyle: CSSProperties = {
   background: "#b0a898",
   border: "1px solid #a89e8e",
   color: "#111",
-  fontWeight: 700,
+  fontWeight: 500,
   fontSize: 12,
   cursor: "pointer",
 };
@@ -1452,7 +1452,7 @@ const choiceButtonStyle = (active: boolean): CSSProperties => ({
   background: active ? "rgba(201,168,76,0.3)" : "rgba(0,0,0,0.06)",
   border: active ? "1px solid #c9a84c" : "1px solid #a89e8e",
   color: "#111",
-  fontWeight: 600,
+  fontWeight: 500,
   fontSize: 12,
   cursor: "pointer",
 });
@@ -1464,7 +1464,7 @@ const actionButtonStyle: CSSProperties = {
   background: "#c9a84c",
   border: "none",
   color: "#071e28",
-  fontWeight: 700,
+  fontWeight: 500,
   fontSize: 12,
   cursor: "pointer",
 };
@@ -1475,7 +1475,7 @@ const smallButtonStyle: CSSProperties = {
   background: "#b0a898",
   border: "1px solid #a89e8e",
   color: "#111",
-  fontWeight: 700,
+  fontWeight: 500,
   fontSize: 11,
   cursor: "pointer",
 };
