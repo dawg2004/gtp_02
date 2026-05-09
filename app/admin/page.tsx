@@ -51,7 +51,8 @@ export default function AdminPage() {
             <h1 style={{ fontSize: 24, fontWeight: 500, margin: 0 }}>生成画像履歴</h1>
             <p style={{ marginTop: 6, color: "#9ba8ae", fontSize: 13 }}>管理者は全ユーザーの生成画像を最新{limit}件まで確認できます。</p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <a href="/admin/accounts" style={smallButtonStyle}>アカウント管理</a>
             <a href="/" style={smallButtonStyle}>アプリへ戻る</a>
             <button onClick={() => void loadHistory()} disabled={loading} style={smallButtonStyle}>
               {loading ? "更新中..." : "更新"}
