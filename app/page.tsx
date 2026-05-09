@@ -27,14 +27,14 @@ type GenerationHistoryItem = {
   created_at: string;
 };
 
-const NAV_ITEMS: Array<{ id: TabId; label: string; mobileLabel: string; icon: string }> = [
-  { id: "generate", label: "画像生成（工事中）", mobileLabel: "生成", icon: "*" },
-  { id: "avatar", label: "キャスト登録", mobileLabel: "キャスト", icon: "A" },
-  { id: "mosaic", label: "モザイク", mobileLabel: "モザイク", icon: "M" },
-  { id: "edit", label: "AI編集", mobileLabel: "編集", icon: "E" },
-  { id: "video", label: "動画生成", mobileLabel: "動画", icon: "V" },
-  { id: "history", label: "履歴", mobileLabel: "履歴", icon: "H" },
-  { id: "plan", label: "プラン", mobileLabel: "プラン", icon: "P" },
+const NAV_ITEMS: Array<{ id: TabId; label: string; mobileLabel: string }> = [
+  { id: "generate", label: "画像生成（工事中）", mobileLabel: "生成" },
+  { id: "avatar", label: "キャスト登録", mobileLabel: "キャスト" },
+  { id: "mosaic", label: "モザイク", mobileLabel: "モザイク" },
+  { id: "edit", label: "AI編集", mobileLabel: "編集" },
+  { id: "video", label: "動画生成", mobileLabel: "動画" },
+  { id: "history", label: "履歴", mobileLabel: "履歴" },
+  { id: "plan", label: "プラン", mobileLabel: "プラン" },
 ];
 
 const AREAS = ["顔全体", "目元のみ", "口元のみ"] as const;
@@ -809,7 +809,6 @@ export default function Home() {
                   fontFamily: "inherit",
                 }}
               >
-                <span style={{ fontSize: 15, width: 18, textAlign: "center" }}>{item.icon}</span>
                 {item.label}
               </button>
             ))}
@@ -838,7 +837,6 @@ export default function Home() {
                 textAlign: "left",
               }}
             >
-              <span style={{ fontSize: 14, width: 16, textAlign: "center" }}>{item.icon}</span>
               {item.label}
             </button>
           ))}
