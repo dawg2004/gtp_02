@@ -89,6 +89,7 @@ export default function Home() {
   const [credits, setCredits] = useState<number | null>(null);
   const [topupLoadingPack, setTopupLoadingPack] = useState<TopupPackId | null>(null);
   const [topupStatus, setTopupStatus] = useState("");
+  const [trialInviteCode, setTrialInviteCode] = useState("");
   const [historyItems, setHistoryItems] = useState<GenerationHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyStatus, setHistoryStatus] = useState("");
@@ -393,6 +394,12 @@ export default function Home() {
     setTopupLoadingPack(packId);
     setTopupStatus("PayPal決済ページを準備中...");
     try {
+      const pack = TOPUP_PACKS[packId];
+      const inviteCode = pack.requiresInviteCode ? trialInviteCode.trim() : undefined;
+      if (pack.requiresInviteCode && !inviteCode) {
+        throw new Error("お試しプランは招待コードを入力してください。");
+      }
+
       const token = await getAuthToken();
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers.Authorization = `Bearer ${token}`;
@@ -400,7 +407,7 @@ export default function Home() {
       const res = await fetch("/api/paypal/create-order", {
         method: "POST",
         headers,
-        body: JSON.stringify({ packId }),
+        body: JSON.stringify({ packId, inviteCode }),
       });
       const data = await res.json();
       if (!res.ok || data.error) {
@@ -415,7 +422,7 @@ export default function Home() {
       setTopupStatus(error instanceof Error ? error.message : "PayPal決済ページを作成できませんでした");
       setTopupLoadingPack(null);
     }
-  }, [getAuthToken]);
+  }, [getAuthToken, trialInviteCode]);
 
   const loadAvatars = useCallback(async () => {
     setAvatarListLoading(true);
@@ -997,7 +1004,7 @@ export default function Home() {
                     borderRadius: 8,
                     background: "rgba(201,168,76,0.14)",
                     border: "1px solid rgba(201,168,76,0.35)",
-                    color: topupStatus.includes("必要") || topupStatus.includes("できません") ? "#b84242" : "#6f5310",
+                    color: topupStatus.includes("必要") || topupStatus.includes("できません") || topupStatus.includes("正しく") ? "#b84242" : "#6f5310",
                     fontSize: 12,
                     fontWeight: 500,
                   }}
@@ -1029,9 +1036,37 @@ export default function Home() {
                           画質・動画サイズ・動画の長さによって異なります。
                         </div>
                       </div>
+                      {pack.requiresInviteCode ? (
+                        <label style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 12 }}>
+                          <span style={sectionLabelStyle}>招待コード</span>
+                          <input
+                            value={trialInviteCode}
+                            onChange={event => setTrialInviteCode(event.target.value)}
+                            placeholder="lumilumi2026"
+                            style={{
+                              width: "100%",
+                              padding: "9px 10px",
+                              borderRadius: 8,
+                              border: "1px solid #a89e8e",
+                              background: "rgba(0,0,0,0.06)",
+                              color: "#111",
+                              fontSize: 12,
+                              fontFamily: "inherit",
+                              outline: "none",
+                            }}
+                          />
+                        </label>
+                      ) : null}
                       <div style={{ marginTop: "auto", paddingTop: 18 }}>
-                        <div style={{ fontSize: 16, fontWeight: 500, color: "#111", marginBottom: 10 }}>
-                          ¥{pack.amount.toLocaleString("ja-JP")}
+                        <div style={{ marginBottom: 10 }}>
+                          {pack.originalAmount ? (
+                            <div style={{ fontSize: 11, color: "#6a6258", textDecoration: "line-through", marginBottom: 2 }}>
+                              ¥{pack.originalAmount.toLocaleString("ja-JP")}
+                            </div>
+                          ) : null}
+                          <div style={{ fontSize: 16, fontWeight: 500, color: "#111" }}>
+                            ¥{pack.amount.toLocaleString("ja-JP")}
+                          </div>
                         </div>
                         <button
                           onClick={() => void startTopupCheckout(pack.id)}

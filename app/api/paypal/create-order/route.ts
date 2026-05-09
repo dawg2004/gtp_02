@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { TOPUP_PACKS, type TopupPackId } from "@/lib/credit-packs";
+import { TOPUP_PACKS, TRIAL_INVITE_CODE, type TopupPackId } from "@/lib/credit-packs";
 import { createPayPalOrder } from "@/lib/paypal";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
@@ -23,10 +23,14 @@ async function getAuthenticatedUser(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { packId } = await req.json();
+    const { packId, inviteCode } = await req.json();
     const pack = TOPUP_PACKS[packId as TopupPackId];
     if (!pack) {
       return NextResponse.json({ error: "無効なチャージパックです" }, { status: 400 });
+    }
+
+    if (pack.requiresInviteCode && String(inviteCode ?? "").trim() !== TRIAL_INVITE_CODE) {
+      return NextResponse.json({ error: "招待コードが正しくありません" }, { status: 403 });
     }
 
     const user = await getAuthenticatedUser(req);
