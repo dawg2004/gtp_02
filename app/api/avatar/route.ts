@@ -6,6 +6,8 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+const MAX_AVATARS_PER_SHOP = 200;
+
 export async function POST(req: NextRequest) {
   try {
     const token = req.headers.get("authorization")?.replace("Bearer ", "");
@@ -25,6 +27,16 @@ export async function POST(req: NextRequest) {
 
     if (!shopData || shopData.credits < 50) {
       return NextResponse.json({ error: "クレジットが不足しています（アバター作成：50クレジット）" }, { status: 402 });
+    }
+
+    const { count: avatarCount, error: countError } = await supabase
+      .from("avatars")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopData.id);
+
+    if (countError) throw new Error(countError.message);
+    if ((avatarCount ?? 0) >= MAX_AVATARS_PER_SHOP) {
+      return NextResponse.json({ error: `登録済みキャストは${MAX_AVATARS_PER_SHOP}人までです` }, { status: 400 });
     }
 
     const uploadedUrls: string[] = [];
@@ -69,9 +81,15 @@ export async function GET(req: NextRequest) {
   const { data: shopData } = await supabase
     .from("shops").select("id").eq("user_id", user.id).single();
 
+  if (!shopData?.id) {
+    return NextResponse.json({ avatars: [], maxAvatars: MAX_AVATARS_PER_SHOP });
+  }
+
   const { data: avatars } = await supabase
     .from("avatars").select("id, name, face_image_url, created_at, status")
-    .eq("shop_id", shopData?.id).order("created_at", { ascending: false });
+    .eq("shop_id", shopData.id)
+    .order("created_at", { ascending: false })
+    .limit(MAX_AVATARS_PER_SHOP);
 
-  return NextResponse.json({ avatars: avatars || [] });
+  return NextResponse.json({ avatars: avatars || [], maxAvatars: MAX_AVATARS_PER_SHOP });
 }

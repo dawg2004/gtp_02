@@ -43,6 +43,7 @@ const NUDGE_STEP = 2;
 const RESIZE_STEP = 4;
 const PHOTO_CREDITS_ESTIMATE = 1;
 const VIDEO_CREDITS_ESTIMATE = 8;
+const MAX_AVATARS = 200;
 const TOPUP_PACK_LIST = Object.entries(TOPUP_PACKS).map(([id, pack]) => ({ id: id as TopupPackId, ...pack }));
 
 export default function Home() {
@@ -450,6 +451,10 @@ export default function Home() {
 
   const submitAvatar = useCallback(async () => {
     if (!avatarName.trim() || avatarFiles.length === 0) return;
+    if (avatars.length >= MAX_AVATARS) {
+      setAvatarStatus(`登録済みキャストは${MAX_AVATARS}人までです。`);
+      return;
+    }
 
     setAvatarLoading(true);
     setAvatarStatus("キャストを登録中...");
@@ -486,7 +491,7 @@ export default function Home() {
     } finally {
       setAvatarLoading(false);
     }
-  }, [avatarFiles, avatarName, getAuthToken, loadAvatars]);
+  }, [avatarFiles, avatarName, avatars.length, getAuthToken, loadAvatars]);
 
   const resetAvatarForm = useCallback(() => {
     setAvatarName("");
@@ -1033,7 +1038,7 @@ export default function Home() {
                       />
                     </label>
                     <div style={{ marginTop: 8, fontSize: 11, color: "#6a6258" }}>
-                      正面が分かる写真を1枚以上アップロードしてください。登録には50クレジット使用します。
+                      正面が分かる写真を1枚以上アップロードしてください。登録には50クレジット使用します。キャスト履歴は最大{MAX_AVATARS}人まで残せます。
                     </div>
                   </div>
 
@@ -1081,14 +1086,14 @@ export default function Home() {
                   <div style={{ display: "flex", gap: 10 }}>
                     <button
                       onClick={() => void submitAvatar()}
-                      disabled={!avatarName.trim() || avatarFiles.length === 0 || avatarLoading}
+                      disabled={!avatarName.trim() || avatarFiles.length === 0 || avatarLoading || avatars.length >= MAX_AVATARS}
                       style={{
                         ...actionButtonStyle,
-                        opacity: !avatarName.trim() || avatarFiles.length === 0 || avatarLoading ? 0.5 : 1,
-                        cursor: !avatarName.trim() || avatarFiles.length === 0 || avatarLoading ? "not-allowed" : "pointer",
+                        opacity: !avatarName.trim() || avatarFiles.length === 0 || avatarLoading || avatars.length >= MAX_AVATARS ? 0.5 : 1,
+                        cursor: !avatarName.trim() || avatarFiles.length === 0 || avatarLoading || avatars.length >= MAX_AVATARS ? "not-allowed" : "pointer",
                       }}
                     >
-                      {avatarLoading ? "登録中..." : "登録する"}
+                      {avatarLoading ? "登録中..." : avatars.length >= MAX_AVATARS ? "上限に達しました" : "登録する"}
                     </button>
                     <button onClick={resetAvatarForm} style={{ ...smallButtonStyle, flex: 1 }}>
                       リセット
@@ -1102,6 +1107,9 @@ export default function Home() {
                   <div>
                     <div style={sectionLabelStyle}>登録済み</div>
                     <div style={{ fontSize: 18, fontWeight: 650, color: "#171717" }}>キャスト一覧</div>
+                    <div style={{ marginTop: 4, fontSize: 11, color: "#6a6258" }}>
+                      {avatars.length}/{MAX_AVATARS} 人
+                    </div>
                   </div>
                   <button onClick={() => void loadAvatars()} style={smallButtonStyle} disabled={avatarListLoading}>
                     更新
