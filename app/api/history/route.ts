@@ -6,6 +6,8 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+const USER_HISTORY_LIMIT = 50;
+
 export async function GET(req: NextRequest) {
   try {
     const token = req.headers.get("authorization")?.replace("Bearer ", "");
@@ -30,13 +32,13 @@ export async function GET(req: NextRequest) {
       .select("id, avatar_id, prompt, generated_image_url, credits_used, created_at")
       .in("shop_id", shopIds)
       .order("created_at", { ascending: false })
-      .limit(60);
+      .limit(USER_HISTORY_LIMIT);
 
     if (error) {
       throw new Error(error.message);
     }
 
-    return NextResponse.json({ history: data ?? [] });
+    return NextResponse.json({ history: data ?? [], limit: USER_HISTORY_LIMIT });
   } catch (error) {
     const message = error instanceof Error ? error.message : "履歴を取得できませんでした";
     console.error("history fetch failed", message);

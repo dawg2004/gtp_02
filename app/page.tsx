@@ -803,7 +803,7 @@ export default function Home() {
                     <div style={sectionLabelStyle}>生成履歴</div>
                     <div style={{ fontSize: 20, fontWeight: 500, color: "#171717", marginBottom: 6 }}>生成した画像</div>
                     <div style={{ fontSize: 12, color: "#4e4a43", lineHeight: 1.7 }}>
-                      アカウントに紐づいた画像生成の結果を新しい順に表示します。
+                      アカウントに紐づいた画像生成の結果を新しい順に最大50件まで表示します。
                     </div>
                   </div>
                   <button onClick={() => void loadHistory()} disabled={historyLoading} style={smallButtonStyle}>
