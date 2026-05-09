@@ -343,6 +343,12 @@ export default function Home() {
     }
   }, [getAuthToken]);
 
+  const logoutAndRedirect = useCallback(async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+  }, []);
+
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
     setHistoryStatus("");
@@ -350,7 +356,7 @@ export default function Home() {
       const token = await getAuthToken();
       if (!token) {
         setHistoryItems([]);
-        setHistoryStatus("ログインしてから履歴を確認してください。");
+        await logoutAndRedirect();
         return;
       }
 
@@ -360,7 +366,9 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok || data.error) {
         if (res.status === 401) {
-          throw new Error("ログイン状態が切れています。もう一度ログインしてください。");
+          setHistoryItems([]);
+          await logoutAndRedirect();
+          return;
         }
         throw new Error(data.error ?? "履歴を取得できませんでした");
       }
@@ -372,7 +380,7 @@ export default function Home() {
     } finally {
       setHistoryLoading(false);
     }
-  }, [getAuthToken]);
+  }, [getAuthToken, logoutAndRedirect]);
 
   const loadCurrentUser = useCallback(async () => {
     const supabase = createClient();
@@ -381,10 +389,8 @@ export default function Home() {
   }, []);
 
   const handleLogout = useCallback(async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    window.location.href = "/login";
-  }, []);
+    await logoutAndRedirect();
+  }, [logoutAndRedirect]);
 
   const startTopupCheckout = useCallback(async (packId: TopupPackId) => {
     setTopupLoadingPack(packId);
