@@ -356,15 +356,10 @@ export default function Home() {
     setHistoryStatus("");
     try {
       const token = await getAuthToken();
-      if (!token) {
-        setHistoryItems([]);
-        setHistoryStatus("ログイン状態を確認できませんでした。ページを再読み込みしてもう一度お試しください。");
-        return;
-      }
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
 
-      const res = await fetch("/api/history", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch("/api/history", { headers });
       const data = await res.json();
       if (!res.ok || data.error) {
         if (res.status === 401) {
