@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fal } from "@fal-ai/client";
 
 const FAL_KEY = process.env.FAL_API_KEY!;
 
@@ -8,27 +9,8 @@ const MODEL_IDS: Record<string, string> = {
 };
 
 async function uploadToFal(file: File): Promise<string> {
-  const res = await fetch("https://storage.fal.run/upload", {
-    method: "POST",
-    headers: {
-      Authorization: `Key ${FAL_KEY}`,
-      "Content-Type": file.type || "image/jpeg",
-      "X-File-Name": file.name || "source-image.jpg",
-    },
-    body: await file.arrayBuffer(),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`fal upload failed: ${res.status} ${text}`);
-  }
-
-  const data = await res.json();
-  if (!data.url) {
-    throw new Error("fal upload failed: response url is missing");
-  }
-
-  return data.url as string;
+  fal.config({ credentials: FAL_KEY });
+  return fal.storage.upload(file, { lifecycle: { expiresIn: "1d" } });
 }
 
 function getErrorMessage(error: unknown): string {
