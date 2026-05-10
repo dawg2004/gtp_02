@@ -7,15 +7,28 @@ const MODEL_IDS: Record<string, string> = {
   seedance: "bytedance/seedance-2.0/fast/image-to-video",
 };
 
-const REQUEST_IDS: Record<string, string> = {
-  grok: "xai/grok-imagine-video",
-  seedance: "bytedance/seedance-2.0/fast",
-};
+async function uploadToFal(file: File): Promise<string> {
+  const res = await fetch("https://storage.fal.run/upload", {
+    method: "POST",
+    headers: {
+      Authorization: `Key ${FAL_KEY}`,
+      "Content-Type": file.type || "image/jpeg",
+      "X-File-Name": file.name || "source-image.jpg",
+    },
+    body: await file.arrayBuffer(),
+  });
 
-async function fileToDataUri(file: File): Promise<string> {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const contentType = file.type || "image/jpeg";
-  return `data:${contentType};base64,${buffer.toString("base64")}`;
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`fal upload failed: ${res.status} ${text}`);
+  }
+
+  const data = await res.json();
+  if (!data.url) {
+    throw new Error("fal upload failed: response url is missing");
+  }
+
+  return data.url as string;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -29,6 +42,10 @@ function getErrorMessage(error: unknown): string {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!FAL_KEY) {
+      return NextResponse.json({ error: "FAL_API_KEY is not configured" }, { status: 500 });
+    }
+
     const formData = await req.formData();
     const file = formData.get("file");
     const model = String(formData.get("model") ?? "grok");
@@ -45,7 +62,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "invalid model" }, { status: 400 });
     }
 
-    const imageUrl = await fileToDataUri(file);
+    const imageUrl = await uploadToFal(file);
     const input: Record<string, unknown> = {
       image_url: imageUrl,
       prompt,
@@ -53,7 +70,7 @@ export async function POST(req: NextRequest) {
     };
 
     if (model === "seedance") {
-      input.duration = String(duration);
+      input.duration = String(Math.min(15, Math.max(4, duration || 5)));
       input.aspect_ratio = "auto";
       input.generate_audio = true;
     } else {
@@ -97,11 +114,10 @@ export async function GET(req: NextRequest) {
   if (!modelId) {
     return NextResponse.json({ error: "invalid model" }, { status: 400 });
   }
-  const requestModelId = REQUEST_IDS[model];
 
   try {
     const statusRes = await fetch(
-      `https://queue.fal.run/${requestModelId}/requests/${requestId}/status`,
+      `https://queue.fal.run/${modelId}/requests/${requestId}/status`,
       { headers: { Authorization: `Key ${FAL_KEY}` } }
     );
     if (!statusRes.ok) {
@@ -112,7 +128,7 @@ export async function GET(req: NextRequest) {
 
     if (statusData.status === "COMPLETED") {
       const resultRes = await fetch(
-        `https://queue.fal.run/${requestModelId}/requests/${requestId}`,
+        `https://queue.fal.run/${modelId}/requests/${requestId}`,
         { headers: { Authorization: `Key ${FAL_KEY}` } }
       );
       if (!resultRes.ok) {
@@ -120,11 +136,15 @@ export async function GET(req: NextRequest) {
         throw new Error(`result fetch failed: ${resultRes.status} ${text}`);
       }
       const result = await resultRes.json();
-      return NextResponse.json({ status: "completed", videoUrl: result.video?.url });
+      const videoUrl = result.video?.url ?? result.data?.video?.url;
+      if (!videoUrl) {
+        throw new Error("result video url is missing");
+      }
+      return NextResponse.json({ status: "completed", videoUrl });
     }
 
     if (statusData.status === "FAILED") {
-      return NextResponse.json({ status: "failed", error: "生成に失敗しました" });
+      return NextResponse.json({ status: "failed", error: statusData.error ?? "生成に失敗しました" });
     }
 
     return NextResponse.json({ status: "processing", queue_position: statusData.queue_position });

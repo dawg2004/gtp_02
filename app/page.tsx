@@ -714,6 +714,33 @@ export default function Home() {
           .mobile-email { display: none !important; }
           .main-content { padding-bottom: 18px !important; }
         }
+        @keyframes lumiveil-orbit {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes lumiveil-breathe {
+          0%, 100% { opacity: 0.45; transform: scale(0.88); }
+          50% { opacity: 1; transform: scale(1); }
+        }
+        @keyframes lumiveil-shimmer {
+          0% { transform: translateX(-120%); }
+          100% { transform: translateX(120%); }
+        }
+        .lumiveil-loader-orbit {
+          animation: lumiveil-orbit 1.15s linear infinite;
+        }
+        .lumiveil-loader-dot {
+          animation: lumiveil-breathe 1.2s ease-in-out infinite;
+        }
+        .lumiveil-loader-dot:nth-child(2) {
+          animation-delay: 0.18s;
+        }
+        .lumiveil-loader-dot:nth-child(3) {
+          animation-delay: 0.36s;
+        }
+        .lumiveil-loader-shimmer {
+          animation: lumiveil-shimmer 1.45s ease-in-out infinite;
+        }
       `}</style>
 
       <div style={{ background: "#071e28", borderBottom: "1px solid #163645", padding: "0 16px", height: 48, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
@@ -1296,7 +1323,10 @@ export default function Home() {
                           boxShadow: "0 0 0 9999px rgba(0,0,0,0.18)",
                           pointerEvents: "none",
                         }}
-                      />
+                        />
+                    ) : null}
+                    {mosaicLoading ? (
+                      <LoadingExperience label="モザイク加工中" detail={mosaicStage || "画像を仕上げています。"} overlay />
                     ) : null}
                   </div>
                 ) : (
@@ -1446,8 +1476,11 @@ export default function Home() {
                 </label>
 
                 {editSrc ? (
-                  <div style={{ marginTop: 14, borderRadius: 10, overflow: "hidden", background: "#000", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div style={{ marginTop: 14, borderRadius: 10, overflow: "hidden", background: "#000", border: "1px solid rgba(255,255,255,0.08)", position: "relative" }}>
                     <img src={editSrc} alt="編集前" style={{ width: "100%", maxHeight: 360, objectFit: "contain", display: "block" }} />
+                    {editLoading ? (
+                      <LoadingExperience label="画像を編集中" detail="質感と雰囲気を整えています。" overlay />
+                    ) : null}
                   </div>
                 ) : (
                   <div
@@ -1549,7 +1582,7 @@ export default function Home() {
                         padding: "8px 12px",
                       }}
                     >
-                      {editStatus}
+                      {editLoading ? <LoadingExperience label={editStatus} detail="少し時間がかかる場合があります。" compact /> : editStatus}
                     </div>
                   ) : null}
                   <button
@@ -1587,8 +1620,11 @@ export default function Home() {
                 </label>
 
                 {videoSrc && (
-                  <div style={{ marginTop: 14, borderRadius: 10, overflow: "hidden", background: "#000", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div style={{ marginTop: 14, borderRadius: 10, overflow: "hidden", background: "#000", border: "1px solid rgba(255,255,255,0.08)", position: "relative" }}>
                     <img src={videoSrc} alt="元画像" style={{ width: "100%", maxHeight: 360, objectFit: "contain", display: "block" }} />
+                    {videoLoading ? (
+                      <LoadingExperience label="動画を生成中" detail={videoStatus || "動きを作っています。"} overlay />
+                    ) : null}
                   </div>
                 )}
 
@@ -1699,7 +1735,7 @@ export default function Home() {
                         padding: "8px 12px",
                       }}
                     >
-                      {videoStatus}
+                      {videoLoading ? <LoadingExperience label={videoStatus} detail="完成までこのままお待ちください。" compact /> : videoStatus}
                     </div>
                   ) : null}
                   <button
@@ -1777,6 +1813,121 @@ function PreviewCard({ label, src }: { label: string; src: string }) {
       </div>
     </div>
   );
+}
+
+function LoadingExperience({
+  label,
+  detail,
+  overlay = false,
+  compact = false,
+}: {
+  label: string;
+  detail?: string;
+  overlay?: boolean;
+  compact?: boolean;
+}) {
+  const content = (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: compact ? "flex-start" : "center",
+        gap: compact ? 10 : 14,
+        width: "100%",
+        color: overlay ? "#f0ece4" : "#171717",
+      }}
+    >
+      <div
+        className="lumiveil-loader-orbit"
+        style={{
+          width: compact ? 30 : 46,
+          height: compact ? 30 : 46,
+          borderRadius: "50%",
+          border: compact ? "2px solid rgba(201,168,76,0.22)" : "3px solid rgba(201,168,76,0.22)",
+          borderTopColor: "#c9a84c",
+          borderRightColor: "rgba(240,236,228,0.75)",
+          flexShrink: 0,
+        }}
+      />
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: compact ? 12 : 15, fontWeight: 500, marginBottom: compact ? 4 : 6 }}>
+          {label}
+        </div>
+        {detail ? (
+          <div style={{ fontSize: compact ? 11 : 12, lineHeight: 1.6, opacity: 0.82 }}>
+            {detail}
+          </div>
+        ) : null}
+        <div style={{ display: "flex", gap: 5, marginTop: compact ? 6 : 10 }}>
+          {[0, 1, 2].map(index => (
+            <span
+              key={index}
+              className="lumiveil-loader-dot"
+              style={{
+                width: compact ? 5 : 7,
+                height: compact ? 5 : 7,
+                borderRadius: "50%",
+                background: "#c9a84c",
+                display: "block",
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  if (overlay) {
+    return (
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 18,
+          background: "linear-gradient(180deg, rgba(7,30,40,0.72), rgba(7,30,40,0.88))",
+          backdropFilter: "blur(2px)",
+        }}
+      >
+        <div
+          style={{
+            width: "min(360px, 92%)",
+            padding: compact ? 12 : 16,
+            borderRadius: 10,
+            border: "1px solid rgba(201,168,76,0.32)",
+            background: "rgba(7,30,40,0.72)",
+            boxShadow: "0 18px 40px rgba(0,0,0,0.28)",
+          }}
+        >
+          {content}
+          <div
+            className="lumiveil-loader-bar"
+            style={{
+              position: "relative",
+              overflow: "hidden",
+              height: 3,
+              marginTop: 14,
+              borderRadius: 999,
+              background: "rgba(240,236,228,0.18)",
+            }}
+          >
+            <span
+              className="lumiveil-loader-shimmer"
+              style={{
+                position: "absolute",
+                inset: 0,
+                background: "linear-gradient(90deg, transparent, rgba(201,168,76,0.9), transparent)",
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return content;
 }
 
 const panelStyle: CSSProperties = {
