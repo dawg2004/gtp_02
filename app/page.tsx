@@ -215,6 +215,17 @@ function imageFileToLocalDataUrl(file: File): Promise<string> {
   });
 }
 
+async function imageUrlToFile(url: string, name: string) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error("キャスト画像を読み込めませんでした");
+  }
+
+  const blob = await response.blob();
+  const extension = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : "jpg";
+  return new File([blob], `${name || "cast"}.${extension}`, { type: blob.type || "image/jpeg" });
+}
+
 export default function Home() {
   const [tab, setTab] = useState<TabId>("mosaic");
   const [mosaicSrc, setMosaicSrc] = useState<string | null>(null);
@@ -741,6 +752,43 @@ export default function Home() {
     setVideoStatus("");
   }, []);
 
+  const useAvatarForMosaic = useCallback(
+    async (avatar: RegisteredAvatar) => {
+      if (!avatar.face_image_url) {
+        setMosaicStage("このキャストには使用できる画像がありません。");
+        return;
+      }
+
+      setMosaicStage(`${avatar.name} の画像を読み込み中...`);
+      try {
+        const file = await imageUrlToFile(avatar.face_image_url, avatar.name);
+        await handleMosaicUpload(file);
+      } catch (error) {
+        setMosaicStage(error instanceof Error ? error.message : "キャスト画像を読み込めませんでした。");
+      }
+    },
+    [handleMosaicUpload]
+  );
+
+  const useAvatarForVideo = useCallback(
+    async (avatar: RegisteredAvatar) => {
+      if (!avatar.face_image_url) {
+        setVideoStatus("このキャストには使用できる画像がありません。");
+        return;
+      }
+
+      setVideoStatus(`${avatar.name} の画像を読み込み中...`);
+      try {
+        const file = await imageUrlToFile(avatar.face_image_url, avatar.name);
+        handleVideoUpload(file);
+        setVideoStatus(`${avatar.name} を元画像に設定しました。`);
+      } catch (error) {
+        setVideoStatus(error instanceof Error ? error.message : "キャスト画像を読み込めませんでした。");
+      }
+    },
+    [handleVideoUpload]
+  );
+
   const handleEditUpload = useCallback((file: File) => {
     setEditFile(file);
     setEditSrc(URL.createObjectURL(file));
@@ -876,7 +924,7 @@ export default function Home() {
   }, [videoDuration, videoModel, videoPrompt, videoRequestId, videoResolution, userEmail]);
 
   useEffect(() => {
-    if (tab === "avatar") {
+    if (tab === "avatar" || tab === "mosaic" || tab === "video") {
       void loadAvatars();
     }
   }, [loadAvatars, tab]);
@@ -1601,6 +1649,45 @@ export default function Home() {
                   />
                 </label>
 
+                {avatars.length > 0 ? (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ ...sectionLabelStyle, marginBottom: 8 }}>登録済みキャストから選択</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(118px, 1fr))", gap: 10 }}>
+                      {avatars.map(avatar => (
+                        <button
+                          key={`mosaic-${avatar.id}`}
+                          onClick={() => void useAvatarForMosaic(avatar)}
+                          disabled={!avatar.face_image_url || mosaicLoading}
+                          style={{
+                            padding: 0,
+                            overflow: "hidden",
+                            borderRadius: 10,
+                            border: "1px solid #a89e8e",
+                            background: "rgba(0,0,0,0.06)",
+                            cursor: !avatar.face_image_url || mosaicLoading ? "not-allowed" : "pointer",
+                            opacity: !avatar.face_image_url || mosaicLoading ? 0.5 : 1,
+                            textAlign: "left",
+                            fontFamily: "inherit",
+                          }}
+                        >
+                          <div style={{ aspectRatio: "1 / 1", background: "#111" }}>
+                            {avatar.face_image_url ? (
+                              <img src={avatar.face_image_url} alt={avatar.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                            ) : null}
+                          </div>
+                          <div style={{ padding: "8px 9px", color: "#111", fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {avatar.name}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 10, fontSize: 11, color: "#6a6258" }}>
+                    キャスト登録すると、ここから画像を選べます。
+                  </div>
+                )}
+
                 {mosaicSrc ? (
                   <div style={{ marginTop: 14, position: "relative", background: "#000", borderRadius: 12, overflow: "hidden" }}>
                     <img src={mosaicSrc} alt="preview" style={{ width: "100%", maxHeight: 480, objectFit: "contain", display: "block" }} />
@@ -1915,6 +2002,45 @@ export default function Home() {
                     onChange={e => e.target.files?.[0] && handleVideoUpload(e.target.files[0])}
                   />
                 </label>
+
+                {avatars.length > 0 ? (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ ...sectionLabelStyle, marginBottom: 8 }}>登録済みキャストから選択</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(118px, 1fr))", gap: 10 }}>
+                      {avatars.map(avatar => (
+                        <button
+                          key={`video-${avatar.id}`}
+                          onClick={() => void useAvatarForVideo(avatar)}
+                          disabled={!avatar.face_image_url || videoLoading}
+                          style={{
+                            padding: 0,
+                            overflow: "hidden",
+                            borderRadius: 10,
+                            border: "1px solid #a89e8e",
+                            background: "rgba(0,0,0,0.06)",
+                            cursor: !avatar.face_image_url || videoLoading ? "not-allowed" : "pointer",
+                            opacity: !avatar.face_image_url || videoLoading ? 0.5 : 1,
+                            textAlign: "left",
+                            fontFamily: "inherit",
+                          }}
+                        >
+                          <div style={{ aspectRatio: "1 / 1", background: "#111" }}>
+                            {avatar.face_image_url ? (
+                              <img src={avatar.face_image_url} alt={avatar.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                            ) : null}
+                          </div>
+                          <div style={{ padding: "8px 9px", color: "#111", fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {avatar.name}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 10, fontSize: 11, color: "#6a6258" }}>
+                    キャスト登録すると、ここから画像を選べます。
+                  </div>
+                )}
 
                 {videoSrc && (
                   <div style={{ marginTop: 14, borderRadius: 10, overflow: "hidden", background: "#000", border: "1px solid rgba(255,255,255,0.08)", position: "relative" }}>
