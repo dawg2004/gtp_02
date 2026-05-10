@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fal } from "@fal-ai/client";
 
 export const runtime = "nodejs";
 
 const FAL_KEY = process.env.FAL_API_KEY!;
 const GROK_EDIT_MODEL = "xai/grok-imagine-image/edit";
 const FACE_PRESERVATION_PROMPT =
-  "Keep the original person's face unchanged. Preserve identity, facial features, expression, eyes, nose, mouth, face shape, hairstyle, and skin tone. Do not beautify, replace, redraw, or alter the face.";
+  "Identity lock: preserve the exact same person from the input image. Keep the face, facial structure, eyes, nose, mouth, jawline, expression, hairstyle, hairline, skin tone, age, and body proportions unchanged. Do not beautify, replace, redraw, stylize, retouch, or reinterpret the face. Edit only the requested non-identity details and keep the image photorealistic.";
 const WATERMARK_REMOVAL_PROMPT =
   "Remove all watermarks, logos, text overlays, captions, signatures, brand marks, and UI artifacts from the image. Do not add any watermark, logo, text, caption, signature, or brand mark to the result.";
 
-async function fileToDataUri(file: File): Promise<string> {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const contentType = file.type || "image/jpeg";
-  return `data:${contentType};base64,${buffer.toString("base64")}`;
+async function uploadToFal(file: File): Promise<string> {
+  fal.config({ credentials: FAL_KEY });
+  return fal.storage.upload(file, { lifecycle: { expiresIn: "1d" } });
 }
 
 function getErrorMessage(error: unknown): string {
@@ -48,6 +48,10 @@ function getFalEditError(status: number, body: string) {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!FAL_KEY) {
+      return NextResponse.json({ error: "FAL_API_KEY is not configured" }, { status: 500 });
+    }
+
     const formData = await req.formData();
     const file = formData.get("file");
     const prompt = String(formData.get("prompt") ?? "").trim();
@@ -65,7 +69,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "invalid resolution" }, { status: 400 });
     }
 
-    const imageUrl = await fileToDataUri(file);
+    const imageUrl = await uploadToFal(file);
     const response = await fetch(`https://fal.run/${GROK_EDIT_MODEL}`, {
       method: "POST",
       headers: {
@@ -76,6 +80,7 @@ export async function POST(req: NextRequest) {
         prompt: `${FACE_PRESERVATION_PROMPT}\n${WATERMARK_REMOVAL_PROMPT}\n\n${prompt}`,
         image_urls: [imageUrl],
         num_images: 1,
+        aspect_ratio: "auto",
         resolution,
         output_format: "jpeg",
       }),

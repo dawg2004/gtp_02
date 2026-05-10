@@ -68,7 +68,7 @@ export default function Home() {
 
   const [editFile, setEditFile] = useState<File | null>(null);
   const [editSrc, setEditSrc] = useState<string | null>(null);
-  const [editPrompt, setEditPrompt] = useState("顔、表情、目鼻口、輪郭、髪型は元画像のまま維持。ロゴ、透かし、文字は削除。背景とライティングだけを自然に整えて、高品質に仕上げる");
+  const [editPrompt, setEditPrompt] = useState("顔、表情、目鼻口、輪郭、髪型、肌色、体型は元画像のまま絶対に変更しない。人物の同一性を保ったまま、ロゴ、透かし、文字だけを削除し、背景とライティングを自然に整える");
   const [editResolution, setEditResolution] = useState<EditResolution>("1k");
   const [editLoading, setEditLoading] = useState(false);
   const [editResult, setEditResult] = useState<string | null>(null);
@@ -1528,7 +1528,7 @@ export default function Home() {
                   <div style={sectionLabelStyle}>モデル</div>
                   <div style={{ fontSize: 18, fontWeight: 500, color: "#1a1a1a", marginBottom: 8 }}>Grok Imagine Image Edit</div>
                   <div style={{ fontSize: 12, color: "#4e4a43", lineHeight: 1.7 }}>
-                    画像をもとに、プロンプトで背景、質感、明るさ、服装や雰囲気などを編集します。
+                    Grokの画像編集APIで、元画像を参照しながら背景、質感、明るさ、文字除去などを編集します。顔は保持する指定を強めています。
                   </div>
                 </div>
 
