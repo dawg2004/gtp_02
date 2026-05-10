@@ -6,7 +6,7 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 export const runtime = "nodejs";
 
 const FAL_KEY = process.env.FAL_API_KEY!;
-const GROK_EDIT_MODEL = "xai/grok-imagine-image/edit";
+const GROK_EDIT_MODEL = "xai/grok-imagine-image/quality/edit";
 const HISTORY_PREFIX = "LUMIVEIL_HISTORY::";
 const FACE_PRESERVATION_PROMPT =
   "Identity lock: preserve the exact same person from the input image. Keep the face, facial structure, eyes, nose, mouth, jawline, expression, hairstyle, hairline, skin tone, age, and body proportions unchanged. Do not beautify, replace, redraw, stylize, retouch, or reinterpret the face. Edit only the requested non-identity details and keep the image photorealistic.";

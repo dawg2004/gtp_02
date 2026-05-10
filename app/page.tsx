@@ -1576,7 +1576,7 @@ export default function Home() {
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 <div style={panelStyle}>
                   <div style={sectionLabelStyle}>モデル</div>
-                  <div style={{ fontSize: 18, fontWeight: 500, color: "#1a1a1a", marginBottom: 8 }}>Grok Imagine Image Edit</div>
+                  <div style={{ fontSize: 18, fontWeight: 500, color: "#1a1a1a", marginBottom: 8 }}>Grok Imagine Quality Edit</div>
                   <div style={{ fontSize: 12, color: "#4e4a43", lineHeight: 1.7 }}>
                     Grokの画像編集APIで、元画像を参照しながら背景、質感、明るさ、文字除去などを編集します。顔は保持する指定を強めています。
                   </div>
@@ -1616,10 +1616,10 @@ export default function Home() {
                     ))}
                   </div>
                   <div style={{ marginTop: 8, fontSize: 11, color: "#6a6258" }}>
-                    接続先: fal.ai / xai/grok-imagine-image/edit
+                    接続先: fal.ai / xai/grok-imagine-image/quality/edit
                   </div>
                   <div style={{ marginTop: 4, fontSize: 11, color: "#6a6258", lineHeight: 1.5 }}>
-                    顔保持指定は入れていますが、Grok Editは顔固定専用モデルではありません。
+                    料金目安: 1K 約$0.06 / 2K 約$0.08。顔保持指定は入れていますが、顔固定専用モデルではありません。
                   </div>
                 </div>
 
