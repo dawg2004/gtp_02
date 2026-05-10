@@ -46,6 +46,7 @@ const PHOTO_CREDITS_ESTIMATE = 1;
 const VIDEO_CREDITS_ESTIMATE = 8;
 const MAX_AVATARS = 200;
 const LOCAL_HISTORY_LIMIT = 50;
+const LOCAL_AVATAR_LIMIT = 200;
 const TOPUP_PACK_LIST = Object.entries(TOPUP_PACKS).map(([id, pack]) => ({ id: id as TopupPackId, ...pack }));
 
 function isVideoHistoryUrl(url: string) {
@@ -115,6 +116,105 @@ function mergeHistoryItems(remoteItems: GenerationHistoryItem[], localItems: Gen
     .slice(0, LOCAL_HISTORY_LIMIT);
 }
 
+function getLocalAvatarKeys(email: string) {
+  return [
+    "lumiveil:avatars:default",
+    email ? `lumiveil:avatars:${email.toLowerCase()}` : "",
+  ].filter(Boolean);
+}
+
+function loadLocalAvatars(email: string): RegisteredAvatar[] {
+  if (typeof window === "undefined") return [];
+
+  const seen = new Set<string>();
+  const items = getLocalAvatarKeys(email).flatMap(key => {
+    try {
+      return JSON.parse(window.localStorage.getItem(key) ?? "[]") as RegisteredAvatar[];
+    } catch {
+      return [];
+    }
+  });
+
+  return items
+    .filter(item => {
+      const uniqueKey = item.id || `${item.name}:${item.face_image_url ?? ""}`;
+      if (!uniqueKey || seen.has(uniqueKey)) return false;
+      seen.add(uniqueKey);
+      return true;
+    })
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, LOCAL_AVATAR_LIMIT);
+}
+
+function saveLocalAvatar(email: string, avatar: Omit<RegisteredAvatar, "id" | "created_at" | "status">) {
+  if (typeof window === "undefined") return null;
+
+  const key = email ? `lumiveil:avatars:${email.toLowerCase()}` : "lumiveil:avatars:default";
+  const current = loadLocalAvatars(email);
+  const nextAvatar: RegisteredAvatar = {
+    ...avatar,
+    id: `local-avatar-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    created_at: new Date().toISOString(),
+    status: "local",
+  };
+  const next = [
+    nextAvatar,
+    ...current.filter(item => item.name !== avatar.name || item.face_image_url !== avatar.face_image_url),
+  ].slice(0, LOCAL_AVATAR_LIMIT);
+
+  window.localStorage.setItem(key, JSON.stringify(next));
+  return nextAvatar;
+}
+
+function mergeAvatars(remoteAvatars: RegisteredAvatar[], localAvatars: RegisteredAvatar[]) {
+  const seen = new Set<string>();
+  const seenNames = new Set<string>();
+  return [...remoteAvatars, ...localAvatars]
+    .filter(item => {
+      const uniqueKey = item.id || `${item.name}:${item.face_image_url ?? ""}`;
+      const nameKey = item.name.trim().toLowerCase();
+      if (item.status === "local" && seenNames.has(nameKey)) return false;
+      if (!uniqueKey || seen.has(uniqueKey)) return false;
+      seen.add(uniqueKey);
+      if (nameKey) seenNames.add(nameKey);
+      return true;
+    })
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, LOCAL_AVATAR_LIMIT);
+}
+
+function imageFileToLocalDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      const maxSize = 220;
+      const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const context = canvas.getContext("2d");
+
+      URL.revokeObjectURL(objectUrl);
+      if (!context) {
+        reject(new Error("画像プレビューを保存できませんでした"));
+        return;
+      }
+
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.72));
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("画像プレビューを読み込めませんでした"));
+    };
+
+    image.src = objectUrl;
+  });
+}
+
 export default function Home() {
   const [tab, setTab] = useState<TabId>("mosaic");
   const [mosaicSrc, setMosaicSrc] = useState<string | null>(null);
@@ -155,6 +255,8 @@ export default function Home() {
   const [videoStatus, setVideoStatus] = useState("");
   const videoPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoPollErrorCountRef = useRef(0);
+  const lastSavedEditResultRef = useRef<string | null>(null);
+  const lastSavedVideoResultRef = useRef<string | null>(null);
   const paypalCaptureStartedRef = useRef(false);
   const [credits, setCredits] = useState<number | null>(null);
   const [topupLoadingPack, setTopupLoadingPack] = useState<TopupPackId | null>(null);
@@ -445,7 +547,7 @@ export default function Home() {
       setHistoryItems(merged);
     } catch (error) {
       setHistoryItems(localHistory);
-      setHistoryStatus(error instanceof Error ? error.message : "履歴を取得できませんでした");
+      setHistoryStatus(localHistory.length > 0 ? "" : error instanceof Error ? error.message : "履歴を取得できませんでした");
     } finally {
       setHistoryLoading(false);
     }
@@ -510,10 +612,12 @@ export default function Home() {
 
   const loadAvatars = useCallback(async () => {
     setAvatarListLoading(true);
+    const localAvatars = loadLocalAvatars(userEmail);
     try {
       const token = await getAuthToken();
       if (!token) {
-        setAvatarStatus("ログインが必要です。");
+        setAvatars(localAvatars);
+        setAvatarStatus(localAvatars.length > 0 ? "" : "ログインが必要です。");
         return;
       }
 
@@ -525,13 +629,14 @@ export default function Home() {
         throw new Error(data.error ?? "キャスト一覧を取得できませんでした");
       }
 
-      setAvatars(data.avatars ?? []);
+      setAvatars(mergeAvatars(data.avatars ?? [], localAvatars));
     } catch (error) {
-      setAvatarStatus(error instanceof Error ? error.message : "キャスト一覧を取得できませんでした");
+      setAvatars(localAvatars);
+      setAvatarStatus(localAvatars.length > 0 ? "" : error instanceof Error ? error.message : "キャスト一覧を取得できませんでした");
     } finally {
       setAvatarListLoading(false);
     }
-  }, [getAuthToken]);
+  }, [getAuthToken, userEmail]);
 
   const handleAvatarFiles = useCallback((files: FileList | null) => {
     const selected = Array.from(files ?? []).filter(file => file.type.startsWith("image/"));
@@ -572,6 +677,18 @@ export default function Home() {
         throw new Error(data.error ?? "キャスト登録に失敗しました");
       }
 
+      try {
+        const faceImageUrl = await imageFileToLocalDataUrl(avatarFiles[0]);
+        const localAvatar = saveLocalAvatar(userEmail, {
+          name: avatarName.trim(),
+          face_image_url: faceImageUrl,
+        });
+        if (localAvatar) {
+          setAvatars(current => mergeAvatars(current, [localAvatar]));
+        }
+      } catch {
+        // Server registration succeeded; local fallback thumbnail is optional.
+      }
       setAvatarName("");
       setAvatarFiles([]);
       setAvatarPreviews(current => {
@@ -581,11 +698,31 @@ export default function Home() {
       setAvatarStatus("キャストを登録しました。");
       await loadAvatars();
     } catch (error) {
+      try {
+        const faceImageUrl = await imageFileToLocalDataUrl(avatarFiles[0]);
+        const localAvatar = saveLocalAvatar(userEmail, {
+          name: avatarName.trim(),
+          face_image_url: faceImageUrl,
+        });
+        if (localAvatar) {
+          setAvatars(current => mergeAvatars([localAvatar], current));
+          setAvatarName("");
+          setAvatarFiles([]);
+          setAvatarPreviews(current => {
+            current.forEach(url => URL.revokeObjectURL(url));
+            return [];
+          });
+          setAvatarStatus("サーバー登録に失敗したため、このブラウザにキャストを保存しました。");
+          return;
+        }
+      } catch {
+        // Fall through to the original server error below.
+      }
       setAvatarStatus(error instanceof Error ? error.message : "キャスト登録に失敗しました");
     } finally {
       setAvatarLoading(false);
     }
-  }, [avatarFiles, avatarName, avatars.length, getAuthToken, loadAvatars]);
+  }, [avatarFiles, avatarName, avatars.length, getAuthToken, loadAvatars, userEmail]);
 
   const resetAvatarForm = useCallback(() => {
     setAvatarName("");
@@ -636,6 +773,8 @@ export default function Home() {
         media_type: "image",
         credits_used: 1,
       });
+      lastSavedEditResultRef.current = data.url;
+      setHistoryItems(current => mergeHistoryItems(current, loadLocalHistory(userEmail)));
       setEditStatus("編集が完了しました。");
     } catch (error) {
       setEditStatus(error instanceof Error ? error.message : "編集に失敗しました");
@@ -701,6 +840,8 @@ export default function Home() {
             media_type: "video",
             credits_used: videoModel === "seedance" ? Math.max(1, Math.round(videoDuration * 2)) : Math.max(1, Math.round(videoDuration * (videoResolution === "480p" ? 1 : 2))),
           });
+          lastSavedVideoResultRef.current = data.videoUrl;
+          setHistoryItems(current => mergeHistoryItems(current, loadLocalHistory(userEmail)));
           setVideoLoading(false);
           setVideoStatus("完成！");
         } else if (data.status === "failed") {
@@ -745,6 +886,32 @@ export default function Home() {
       void loadHistory();
     }
   }, [loadHistory, tab]);
+
+  useEffect(() => {
+    if (!editResult || lastSavedEditResultRef.current === editResult) return;
+
+    saveLocalHistory(userEmail, {
+      prompt: `AI編集: ${editPrompt}`,
+      generated_image_url: editResult,
+      media_type: "image",
+      credits_used: 1,
+    });
+    lastSavedEditResultRef.current = editResult;
+    setHistoryItems(current => mergeHistoryItems(current, loadLocalHistory(userEmail)));
+  }, [editPrompt, editResult, userEmail]);
+
+  useEffect(() => {
+    if (!videoResult || lastSavedVideoResultRef.current === videoResult) return;
+
+    saveLocalHistory(userEmail, {
+      prompt: `${videoModel === "seedance" ? "Seedance動画" : "Grok動画"}: ${videoPrompt}`,
+      generated_image_url: videoResult,
+      media_type: "video",
+      credits_used: videoModel === "seedance" ? Math.max(1, Math.round(videoDuration * 2)) : Math.max(1, Math.round(videoDuration * (videoResolution === "480p" ? 1 : 2))),
+    });
+    lastSavedVideoResultRef.current = videoResult;
+    setHistoryItems(current => mergeHistoryItems(current, loadLocalHistory(userEmail)));
+  }, [videoDuration, videoModel, videoPrompt, videoResolution, videoResult, userEmail]);
 
   useEffect(() => {
     void loadCredits();
