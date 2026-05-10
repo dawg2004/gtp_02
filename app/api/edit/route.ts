@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fal } from "@fal-ai/client";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 export const runtime = "nodejs";
 
 const FAL_KEY = process.env.FAL_API_KEY!;
 const GROK_EDIT_MODEL = "xai/grok-imagine-image/edit";
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 const FACE_PRESERVATION_PROMPT =
   "Identity lock: preserve the exact same person from the input image. Keep the face, facial structure, eyes, nose, mouth, jawline, expression, hairstyle, hairline, skin tone, age, and body proportions unchanged. Do not beautify, replace, redraw, stylize, retouch, or reinterpret the face. Edit only the requested non-identity details and keep the image photorealistic.";
 const WATERMARK_REMOVAL_PROMPT =
@@ -52,26 +48,39 @@ function getFalEditError(status: number, body: string) {
   return `Grok編集に失敗しました。(${status}) ${redacted.slice(0, 240)}`;
 }
 
-async function getAuthenticatedUser(req: NextRequest) {
+function createBearerSupabaseClient(token: string) {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      global: {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    }
+  );
+}
+
+async function getAuthenticatedContext(req: NextRequest): Promise<{ user: User | null; client: SupabaseClient }> {
   const token = req.headers.get("authorization")?.replace("Bearer ", "");
   if (token) {
-    const { data: { user } } = await supabase.auth.getUser(token);
-    if (user) return user;
+    const tokenSupabase = createBearerSupabaseClient(token);
+    const { data: { user } } = await tokenSupabase.auth.getUser(token);
+    if (user) return { user, client: tokenSupabase };
   }
 
   const cookieSupabase = await createServerSupabaseClient();
   const { data: { user } } = await cookieSupabase.auth.getUser();
-  return user;
+  return { user, client: cookieSupabase };
 }
 
-async function saveGenerationHistory(userId: string, prompt: string, generatedUrl: string) {
-  const { data: shop } = await supabase
+async function saveGenerationHistory(client: SupabaseClient, userId: string, prompt: string, generatedUrl: string) {
+  const { data: shop } = await client
     .from("shops")
     .select("id")
     .eq("user_id", userId)
     .maybeSingle();
 
-  const { error } = await supabase.from("generation_history").insert({
+  const { error } = await client.from("generation_history").insert({
     shop_id: shop?.id ?? userId,
     avatar_id: null,
     prompt: `AI編集: ${prompt}`,
@@ -133,9 +142,9 @@ export async function POST(req: NextRequest) {
     const url = data.images?.[0]?.url;
     if (!url) throw new Error("URL not found");
 
-    const user = await getAuthenticatedUser(req);
+    const { user, client } = await getAuthenticatedContext(req);
     if (user) {
-      await saveGenerationHistory(user.id, prompt, url);
+      await saveGenerationHistory(client, user.id, prompt, url);
     }
 
     return NextResponse.json({ url, revisedPrompt: data.revised_prompt ?? "" });

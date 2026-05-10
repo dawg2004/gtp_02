@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fal } from "@fal-ai/client";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 const FAL_KEY = process.env.FAL_API_KEY!;
@@ -9,10 +9,6 @@ const MODEL_IDS: Record<string, string> = {
   grok: "xai/grok-imagine-video/image-to-video",
   seedance: "bytedance/seedance-2.0/fast/image-to-video",
 };
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 async function uploadToFal(file: File): Promise<string> {
   fal.config({ credentials: FAL_KEY });
@@ -32,39 +28,54 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
-async function getAuthenticatedUser(req: NextRequest) {
+function createBearerSupabaseClient(token: string) {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      global: {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    }
+  );
+}
+
+async function getAuthenticatedContext(req: NextRequest): Promise<{ user: User | null; client: SupabaseClient }> {
   const token = req.headers.get("authorization")?.replace("Bearer ", "");
   if (token) {
-    const { data: { user } } = await supabase.auth.getUser(token);
-    if (user) return user;
+    const tokenSupabase = createBearerSupabaseClient(token);
+    const { data: { user } } = await tokenSupabase.auth.getUser(token);
+    if (user) return { user, client: tokenSupabase };
   }
 
   const cookieSupabase = await createServerSupabaseClient();
   const { data: { user } } = await cookieSupabase.auth.getUser();
-  return user;
+  return { user, client: cookieSupabase };
 }
 
 async function saveVideoHistory({
+  client,
   userId,
   model,
   prompt,
   videoUrl,
   creditsUsed,
 }: {
+  client: SupabaseClient;
   userId: string;
   model: string;
   prompt: string;
   videoUrl: string;
   creditsUsed: number;
 }) {
-  const { data: shop } = await supabase
+  const { data: shop } = await client
     .from("shops")
     .select("id")
     .eq("user_id", userId)
     .maybeSingle();
   const shopId = shop?.id ?? userId;
 
-  const { data: existing } = await supabase
+  const { data: existing } = await client
     .from("generation_history")
     .select("id")
     .eq("shop_id", shopId)
@@ -74,7 +85,7 @@ async function saveVideoHistory({
   if (existing) return;
 
   const label = model === "seedance" ? "Seedance動画" : "Grok動画";
-  const { error } = await supabase.from("generation_history").insert({
+  const { error } = await client.from("generation_history").insert({
     shop_id: shopId,
     avatar_id: null,
     prompt: `${label}: ${prompt}`,
@@ -176,10 +187,11 @@ export async function GET(req: NextRequest) {
       if (!videoUrl) {
         throw new Error("result video url is missing");
       }
-      const user = await getAuthenticatedUser(req);
+      const { user, client } = await getAuthenticatedContext(req);
       if (user) {
         const creditsUsed = model === "seedance" ? Math.max(1, Math.round(duration * 2)) : Math.max(1, Math.round(duration * (resolution === "480p" ? 1 : 2)));
         await saveVideoHistory({
+          client,
           userId: user.id,
           model,
           prompt,

@@ -1610,7 +1610,10 @@ export default function Home() {
                     ))}
                   </div>
                   <div style={{ marginTop: 8, fontSize: 11, color: "#6a6258" }}>
-                    Grok Image Edit — $0.022 / image
+                    接続先: fal.ai / xai/grok-imagine-image/edit
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 11, color: "#6a6258", lineHeight: 1.5 }}>
+                    顔保持指定は入れていますが、Grok Editは顔固定専用モデルではありません。
                   </div>
                 </div>
 
