@@ -85,6 +85,7 @@ export default function Home() {
   const [videoRequestId, setVideoRequestId] = useState<string | null>(null);
   const [videoStatus, setVideoStatus] = useState("");
   const videoPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const videoPollErrorCountRef = useRef(0);
   const paypalCaptureStartedRef = useRef(false);
   const [credits, setCredits] = useState<number | null>(null);
   const [topupLoadingPack, setTopupLoadingPack] = useState<TopupPackId | null>(null);
@@ -577,6 +578,7 @@ export default function Home() {
     if (!videoFile) return;
     setVideoLoading(true);
     setVideoStatus("画像をアップロード中...");
+    videoPollErrorCountRef.current = 0;
     try {
       const formData = new FormData();
       formData.append("file", videoFile);
@@ -597,10 +599,14 @@ export default function Home() {
 
   useEffect(() => {
     if (!videoRequestId) return;
-    videoPollRef.current = setInterval(async () => {
+    const pollVideoStatus = async () => {
       try {
         const res = await fetch(`/api/video?requestId=${videoRequestId}&model=${videoModel}`);
         const data = await res.json();
+        if (!res.ok || data.error) {
+          throw new Error(data.error ?? "動画生成の状態確認に失敗しました");
+        }
+        videoPollErrorCountRef.current = 0;
         if (data.status === "completed") {
           clearInterval(videoPollRef.current!);
           setVideoRequestId(null);
@@ -614,12 +620,27 @@ export default function Home() {
           setVideoStatus("生成に失敗しました");
         } else {
           const pos = (data as { queue_position?: number }).queue_position;
-          setVideoStatus(pos != null ? `生成中... (キュー位置: ${pos})` : "生成中...");
+          const falStatus = (data as { falStatus?: string }).falStatus;
+          setVideoStatus(
+            pos != null
+              ? `生成待ち... (キュー位置: ${pos})`
+              : falStatus === "IN_PROGRESS"
+                ? "生成処理中..."
+                : "生成中..."
+          );
         }
-      } catch {
-        // keep polling on transient errors
+      } catch (error) {
+        videoPollErrorCountRef.current += 1;
+        if (videoPollErrorCountRef.current >= 2) {
+          clearInterval(videoPollRef.current!);
+          setVideoRequestId(null);
+          setVideoLoading(false);
+          setVideoStatus(error instanceof Error ? error.message : "動画生成の状態確認に失敗しました");
+        }
       }
-    }, 5000);
+    };
+    void pollVideoStatus();
+    videoPollRef.current = setInterval(() => void pollVideoStatus(), 5000);
     return () => { if (videoPollRef.current) clearInterval(videoPollRef.current); };
   }, [videoRequestId, videoModel]);
 

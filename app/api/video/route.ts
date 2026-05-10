@@ -13,6 +13,10 @@ async function uploadToFal(file: File): Promise<string> {
   return fal.storage.upload(file, { lifecycle: { expiresIn: "1d" } });
 }
 
+function configureFal() {
+  fal.config({ credentials: FAL_KEY });
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     const cause = error.cause instanceof Error ? ` (${error.cause.message})` : "";
@@ -27,6 +31,7 @@ export async function POST(req: NextRequest) {
     if (!FAL_KEY) {
       return NextResponse.json({ error: "FAL_API_KEY is not configured" }, { status: 500 });
     }
+    configureFal();
 
     const formData = await req.formData();
     const file = formData.get("file");
@@ -60,21 +65,13 @@ export async function POST(req: NextRequest) {
       input.aspect_ratio = "auto";
     }
 
-    const res = await fetch(`https://queue.fal.run/${modelId}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Key ${FAL_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(input),
+    const data = await fal.queue.submit(modelId, {
+      input,
+      priority: "normal",
+      storageSettings: { expiresIn: "1d" },
+      startTimeout: 900,
     });
 
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`fal queue submit failed: ${text}`);
-    }
-
-    const data = await res.json();
     return NextResponse.json({ requestId: data.request_id, model });
   } catch (error) {
     const msg = getErrorMessage(error);
@@ -98,40 +95,35 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const statusRes = await fetch(
-      `https://queue.fal.run/${modelId}/requests/${requestId}/status`,
-      { headers: { Authorization: `Key ${FAL_KEY}` } }
-    );
-    if (!statusRes.ok) {
-      const text = await statusRes.text();
-      throw new Error(`status check failed: ${statusRes.status} ${text}`);
+    if (!FAL_KEY) {
+      return NextResponse.json({ error: "FAL_API_KEY is not configured" }, { status: 500 });
     }
-    const statusData = await statusRes.json();
+    configureFal();
+
+    const statusData = await fal.queue.status(modelId, {
+      requestId,
+      logs: true,
+    });
 
     if (statusData.status === "COMPLETED") {
-      const resultRes = await fetch(
-        `https://queue.fal.run/${modelId}/requests/${requestId}`,
-        { headers: { Authorization: `Key ${FAL_KEY}` } }
-      );
-      if (!resultRes.ok) {
-        const text = await resultRes.text();
-        throw new Error(`result fetch failed: ${resultRes.status} ${text}`);
-      }
-      const result = await resultRes.json();
-      const videoUrl = result.video?.url ?? result.data?.video?.url;
+      const result = await fal.queue.result(modelId, { requestId });
+      const resultData = result.data as { video?: { url?: string } };
+      const videoUrl = resultData.video?.url;
       if (!videoUrl) {
         throw new Error("result video url is missing");
       }
       return NextResponse.json({ status: "completed", videoUrl });
     }
 
-    if (statusData.status === "FAILED") {
-      return NextResponse.json({ status: "failed", error: statusData.error ?? "生成に失敗しました" });
-    }
-
-    return NextResponse.json({ status: "processing", queue_position: statusData.queue_position });
+    return NextResponse.json({
+      status: "processing",
+      queue_position: statusData.status === "IN_QUEUE" ? statusData.queue_position : undefined,
+      falStatus: statusData.status,
+      logs: "logs" in statusData ? statusData.logs?.slice(-3).map(log => log.message) : [],
+    });
   } catch (error) {
-    console.error("video poll failed", error);
-    return NextResponse.json({ error: "ステータス確認に失敗しました" }, { status: 500 });
+    const msg = getErrorMessage(error);
+    console.error("video poll failed", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
