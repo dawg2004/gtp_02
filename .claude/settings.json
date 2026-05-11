@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "mcp__claude_ai_Vercel__list_teams",
+      "mcp__claude_ai_Vercel__list_deployments",
+      "Bash(git -C /Users/dawg/lumiveil status --short)",
+      "Bash(git -C /Users/dawg/lumiveil ls-files)",
+      "Bash(git -C /Users/dawg/lumiveil ls-files --others --exclude-standard)",
+      "Bash(git -C /Users/dawg/lumiveil diff --stat HEAD)",
+      "Bash(git -C /Users/dawg/lumiveil log --oneline origin/main..HEAD)",
+      "Bash(git -C /Users/dawg/lumiveil diff --stat HEAD app/api/video/route.ts)",
+      "Bash(git -C /Users/dawg/lumiveil status -s)",
+      "Bash(npx --prefix /Users/dawg/lumiveil tsc --noEmit)",
+      "Bash(git -C /Users/dawg/lumiveil add app/api/video/route.ts app/page.tsx)",
+      "Bash(git -C /Users/dawg/lumiveil commit -m ' *)",
+      "Bash(git -C /Users/dawg/lumiveil remote -v)",
+      "Bash(gh auth *)",
+      "Bash(git -C /Users/dawg/lumiveil pull --rebase origin main)",
+      "Bash(git -C /Users/dawg/lumiveil diff --cached --stat)",
+      "Bash(git -C /Users/dawg/lumiveil merge --continue --no-edit)",
+      "Bash(git -C /Users/dawg/lumiveil merge --continue)"
+    ]
+  }
+}

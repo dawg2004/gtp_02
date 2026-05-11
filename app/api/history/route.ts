@@ -76,6 +76,35 @@ export async function GET(req: NextRequest) {
   }
 }
 
+export async function POST(req: NextRequest) {
+  try {
+    const { user, client } = await getAuthenticatedContext(req);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const { prompt, generated_image_url, media_type, credits_used } = body;
+
+    const { data: shop } = await client.from("shops").select("id").eq("user_id", user.id).maybeSingle();
+    const shop_id = shop?.id || user.id;
+
+    const historyPrompt = `${HISTORY_PREFIX}${JSON.stringify({ prompt, url: generated_image_url, kind: media_type })}`;
+
+    const { error } = await client.from("generation_history").insert({
+      shop_id,
+      prompt: historyPrompt,
+      credits_used: credits_used || 1,
+    });
+
+    if (error) throw new Error(error.message);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("history save failed", error);
+    return NextResponse.json({ error: "履歴の保存に失敗しました" }, { status: 500 });
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   try {
     const { user, client } = await getAuthenticatedContext(req);

@@ -5,7 +5,7 @@ import { TOPUP_PACKS, type TopupPackId } from "@/lib/credit-packs";
 import { createClient } from "@/lib/supabase";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 
-type TabId = "generate" | "avatar" | "mosaic" | "edit" | "video" | "history" | "plan";
+type TabId = "generate" | "avatar" | "mosaic" | "edit" | "video" | "history" | "plan" | "mypage";
 type MosaicBox = { x: number; y: number; width: number; height: number };
 type ImageSize = { width: number; height: number };
 type MosaicMode = "blur" | "gaussian" | "simple";
@@ -36,6 +36,7 @@ const NAV_ITEMS: Array<{ id: TabId; label: string; mobileLabel: string }> = [
   { id: "video", label: "動画生成", mobileLabel: "動画" },
   { id: "history", label: "履歴", mobileLabel: "履歴" },
   { id: "plan", label: "プラン", mobileLabel: "プラン" },
+  { id: "mypage", label: "マイページ", mobileLabel: "設定" },
 ];
 
 const AREAS = ["顔全体", "目元のみ", "口元のみ"] as const;
@@ -45,189 +46,11 @@ const RESIZE_STEP = 4;
 const PHOTO_CREDITS_ESTIMATE = 1;
 const VIDEO_CREDITS_ESTIMATE = 8;
 const MAX_AVATARS = 200;
-const LOCAL_HISTORY_LIMIT = 50;
-const LOCAL_AVATAR_LIMIT = 200;
 const TOPUP_PACK_LIST = Object.entries(TOPUP_PACKS).map(([id, pack]) => ({ id: id as TopupPackId, ...pack }));
 
 function isVideoHistoryUrl(url: string) {
   const cleanUrl = url.split("?")[0].toLowerCase();
   return cleanUrl.endsWith(".mp4") || cleanUrl.endsWith(".webm") || cleanUrl.endsWith(".mov");
-}
-
-function getLocalHistoryKeys(email: string) {
-  return [
-    "lumiveil:generation-history:default",
-    email ? `lumiveil:generation-history:${email.toLowerCase()}` : "",
-  ].filter(Boolean);
-}
-
-function loadLocalHistory(email: string): GenerationHistoryItem[] {
-  if (typeof window === "undefined") return [];
-
-  const seen = new Set<string>();
-  const items = getLocalHistoryKeys(email).flatMap(key => {
-    try {
-      return JSON.parse(window.localStorage.getItem(key) ?? "[]") as GenerationHistoryItem[];
-    } catch {
-      return [];
-    }
-  });
-
-  return items
-    .filter(item => {
-      const uniqueKey = item.generated_image_url || item.id;
-      if (!uniqueKey || seen.has(uniqueKey)) return false;
-      seen.add(uniqueKey);
-      return true;
-    })
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, LOCAL_HISTORY_LIMIT);
-}
-
-function saveLocalHistory(email: string, item: Omit<GenerationHistoryItem, "id" | "avatar_id" | "created_at">) {
-  if (typeof window === "undefined" || !item.generated_image_url) return;
-
-  const key = email ? `lumiveil:generation-history:${email.toLowerCase()}` : "lumiveil:generation-history:default";
-  const current = loadLocalHistory(email);
-  const nextItem: GenerationHistoryItem = {
-    ...item,
-    id: `local-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    avatar_id: null,
-    created_at: new Date().toISOString(),
-  };
-  const next = [
-    nextItem,
-    ...current.filter(historyItem => historyItem.generated_image_url !== item.generated_image_url),
-  ].slice(0, LOCAL_HISTORY_LIMIT);
-
-  window.localStorage.setItem(key, JSON.stringify(next));
-}
-
-function deleteLocalHistory(email: string, ids: string[]) {
-  if (typeof window === "undefined" || ids.length === 0) return;
-
-  const selectedIds = new Set(ids);
-  getLocalHistoryKeys(email).forEach(key => {
-    try {
-      const current = JSON.parse(window.localStorage.getItem(key) ?? "[]") as GenerationHistoryItem[];
-      const next = current.filter(item => !selectedIds.has(item.id));
-      window.localStorage.setItem(key, JSON.stringify(next));
-    } catch {
-      // Ignore malformed local history and keep the rest of the deletion flow moving.
-    }
-  });
-}
-
-function mergeHistoryItems(remoteItems: GenerationHistoryItem[], localItems: GenerationHistoryItem[]) {
-  const seen = new Set<string>();
-  return [...remoteItems, ...localItems]
-    .filter(item => {
-      const uniqueKey = item.generated_image_url || item.id;
-      if (!uniqueKey || seen.has(uniqueKey)) return false;
-      seen.add(uniqueKey);
-      return true;
-    })
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, LOCAL_HISTORY_LIMIT);
-}
-
-function getLocalAvatarKeys(email: string) {
-  return [
-    "lumiveil:avatars:default",
-    email ? `lumiveil:avatars:${email.toLowerCase()}` : "",
-  ].filter(Boolean);
-}
-
-function loadLocalAvatars(email: string): RegisteredAvatar[] {
-  if (typeof window === "undefined") return [];
-
-  const seen = new Set<string>();
-  const items = getLocalAvatarKeys(email).flatMap(key => {
-    try {
-      return JSON.parse(window.localStorage.getItem(key) ?? "[]") as RegisteredAvatar[];
-    } catch {
-      return [];
-    }
-  });
-
-  return items
-    .filter(item => {
-      const uniqueKey = item.id || `${item.name}:${item.face_image_url ?? ""}`;
-      if (!uniqueKey || seen.has(uniqueKey)) return false;
-      seen.add(uniqueKey);
-      return true;
-    })
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, LOCAL_AVATAR_LIMIT);
-}
-
-function saveLocalAvatar(email: string, avatar: Omit<RegisteredAvatar, "id" | "created_at" | "status">) {
-  if (typeof window === "undefined") return null;
-
-  const key = email ? `lumiveil:avatars:${email.toLowerCase()}` : "lumiveil:avatars:default";
-  const current = loadLocalAvatars(email);
-  const nextAvatar: RegisteredAvatar = {
-    ...avatar,
-    id: `local-avatar-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    created_at: new Date().toISOString(),
-    status: "local",
-  };
-  const next = [
-    nextAvatar,
-    ...current.filter(item => item.name !== avatar.name || item.face_image_url !== avatar.face_image_url),
-  ].slice(0, LOCAL_AVATAR_LIMIT);
-
-  window.localStorage.setItem(key, JSON.stringify(next));
-  return nextAvatar;
-}
-
-function mergeAvatars(remoteAvatars: RegisteredAvatar[], localAvatars: RegisteredAvatar[]) {
-  const seen = new Set<string>();
-  const seenNames = new Set<string>();
-  return [...remoteAvatars, ...localAvatars]
-    .filter(item => {
-      const uniqueKey = item.id || `${item.name}:${item.face_image_url ?? ""}`;
-      const nameKey = item.name.trim().toLowerCase();
-      if (item.status === "local" && seenNames.has(nameKey)) return false;
-      if (!uniqueKey || seen.has(uniqueKey)) return false;
-      seen.add(uniqueKey);
-      if (nameKey) seenNames.add(nameKey);
-      return true;
-    })
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, LOCAL_AVATAR_LIMIT);
-}
-
-function imageFileToLocalDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(file);
-    const image = new Image();
-
-    image.onload = () => {
-      const maxSize = 220;
-      const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(image.width * scale));
-      canvas.height = Math.max(1, Math.round(image.height * scale));
-      const context = canvas.getContext("2d");
-
-      URL.revokeObjectURL(objectUrl);
-      if (!context) {
-        reject(new Error("画像プレビューを保存できませんでした"));
-        return;
-      }
-
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", 0.72));
-    };
-
-    image.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error("画像プレビューを読み込めませんでした"));
-    };
-
-    image.src = objectUrl;
-  });
 }
 
 async function imageUrlToFile(url: string, name: string) {
@@ -295,6 +118,11 @@ export default function Home() {
   const [historyStatus, setHistoryStatus] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const [mypageEmail, setMypageEmail] = useState("");
+  const [mypagePassword, setMypagePassword] = useState("");
+  const [mypageStatus, setMypageStatus] = useState("");
+  const [mypageLoading, setMypageLoading] = useState(false);
 
   const buildRegionBox = useCallback((regions: FaceRegions, area: (typeof AREAS)[number]) => {
     if (area === "目元のみ") {
@@ -554,34 +382,31 @@ export default function Home() {
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
     setHistoryStatus("");
-    const localHistory = loadLocalHistory(userEmail);
     try {
       const token = await getAuthToken();
-      const headers: Record<string, string> = {};
-      if (token) headers.Authorization = `Bearer ${token}`;
+      if (!token) {
+        setHistoryItems([]);
+        setHistoryStatus("ログイン状態を確認できませんでした。");
+        return;
+      }
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
 
       const res = await fetch("/api/history", { headers });
       const data = await res.json();
       if (!res.ok || data.error) {
-        if (res.status === 401) {
-          setHistoryItems([]);
-          setHistoryStatus("ログイン状態を確認できませんでした。ページを再読み込みしてもう一度お試しください。");
-          return;
-        }
         throw new Error(data.error ?? "履歴を取得できませんでした");
       }
 
-      const merged = mergeHistoryItems(data.history ?? [], localHistory);
-      setHistoryItems(merged);
+      setHistoryItems(data.history ?? []);
       setSelectedHistoryIds([]);
     } catch (error) {
-      setHistoryItems(localHistory);
+      setHistoryItems([]);
       setSelectedHistoryIds([]);
-      setHistoryStatus(localHistory.length > 0 ? "" : error instanceof Error ? error.message : "履歴を取得できませんでした");
+      setHistoryStatus(error instanceof Error ? error.message : "履歴を取得できませんでした");
     } finally {
       setHistoryLoading(false);
     }
-  }, [getAuthToken, userEmail]);
+  }, [getAuthToken]);
 
   const toggleHistorySelection = useCallback((id: string) => {
     setSelectedHistoryIds(current =>
@@ -614,8 +439,7 @@ export default function Home() {
         throw new Error(data.error ?? "履歴の削除に失敗しました");
       }
 
-      deleteLocalHistory(userEmail, selectedHistoryIds);
-      const deletedIds = new Set<string>([...selectedHistoryIds, ...(data.deletedIds ?? [])]);
+      const deletedIds = new Set<string>(data.deletedIds ?? selectedHistoryIds);
       setHistoryItems(current => current.filter(item => !deletedIds.has(item.id)));
       setSelectedHistoryIds([]);
       setHistoryStatus(`${deletedIds.size}件の履歴を削除しました。`);
@@ -624,13 +448,40 @@ export default function Home() {
     } finally {
       setHistoryDeleting(false);
     }
-  }, [getAuthToken, historyDeleting, selectedHistoryIds, userEmail]);
+  }, [getAuthToken, historyDeleting, selectedHistoryIds]);
 
   const loadCurrentUser = useCallback(async () => {
     const supabase = createClient();
     const { data } = await supabase.auth.getUser();
     setUserEmail(data.user?.email ?? "");
   }, []);
+
+  const handleUpdateAccount = useCallback(async () => {
+    setMypageLoading(true);
+    setMypageStatus("アカウント情報を更新中...");
+    try {
+      const supabase = createClient();
+      const updates: { email?: string; password?: string } = {};
+      if (mypageEmail && mypageEmail !== userEmail) updates.email = mypageEmail;
+      if (mypagePassword) updates.password = mypagePassword;
+
+      if (Object.keys(updates).length === 0) {
+        setMypageStatus("変更内容がありません。");
+        setMypageLoading(false);
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser(updates);
+      if (error) throw error;
+
+      setMypageStatus("アカウント情報を更新しました。メールアドレスを変更した場合は、確認メールのリンクをクリックしてください。");
+      setMypagePassword("");
+    } catch (error) {
+      setMypageStatus(error instanceof Error ? error.message : "更新に失敗しました。");
+    } finally {
+      setMypageLoading(false);
+    }
+  }, [mypageEmail, mypagePassword, userEmail]);
 
   const startTopupCheckout = useCallback(async (packId: TopupPackId) => {
     setTopupLoadingPack(packId);
@@ -685,12 +536,11 @@ export default function Home() {
 
   const loadAvatars = useCallback(async () => {
     setAvatarListLoading(true);
-    const localAvatars = loadLocalAvatars(userEmail);
     try {
       const token = await getAuthToken();
       if (!token) {
-        setAvatars(localAvatars);
-        setAvatarStatus(localAvatars.length > 0 ? "" : "ログインが必要です。");
+        setAvatars([]);
+        setAvatarStatus("ログインが必要です。");
         return;
       }
 
@@ -702,14 +552,14 @@ export default function Home() {
         throw new Error(data.error ?? "キャスト一覧を取得できませんでした");
       }
 
-      setAvatars(mergeAvatars(data.avatars ?? [], localAvatars));
+      setAvatars(data.avatars ?? []);
     } catch (error) {
-      setAvatars(localAvatars);
-      setAvatarStatus(localAvatars.length > 0 ? "" : error instanceof Error ? error.message : "キャスト一覧を取得できませんでした");
+      setAvatars([]);
+      setAvatarStatus(error instanceof Error ? error.message : "キャスト一覧を取得できませんでした");
     } finally {
       setAvatarListLoading(false);
     }
-  }, [getAuthToken, userEmail]);
+  }, [getAuthToken]);
 
   const handleAvatarFiles = useCallback((files: FileList | null) => {
     const selected = Array.from(files ?? []).filter(file => file.type.startsWith("image/"));
@@ -750,18 +600,6 @@ export default function Home() {
         throw new Error(data.error ?? "キャスト登録に失敗しました");
       }
 
-      try {
-        const faceImageUrl = await imageFileToLocalDataUrl(avatarFiles[0]);
-        const localAvatar = saveLocalAvatar(userEmail, {
-          name: avatarName.trim(),
-          face_image_url: faceImageUrl,
-        });
-        if (localAvatar) {
-          setAvatars(current => mergeAvatars(current, [localAvatar]));
-        }
-      } catch {
-        // Server registration succeeded; local fallback thumbnail is optional.
-      }
       setAvatarName("");
       setAvatarFiles([]);
       setAvatarPreviews(current => {
@@ -771,31 +609,11 @@ export default function Home() {
       setAvatarStatus("キャストを登録しました。");
       await loadAvatars();
     } catch (error) {
-      try {
-        const faceImageUrl = await imageFileToLocalDataUrl(avatarFiles[0]);
-        const localAvatar = saveLocalAvatar(userEmail, {
-          name: avatarName.trim(),
-          face_image_url: faceImageUrl,
-        });
-        if (localAvatar) {
-          setAvatars(current => mergeAvatars([localAvatar], current));
-          setAvatarName("");
-          setAvatarFiles([]);
-          setAvatarPreviews(current => {
-            current.forEach(url => URL.revokeObjectURL(url));
-            return [];
-          });
-          setAvatarStatus("サーバー登録に失敗したため、このブラウザにキャストを保存しました。");
-          return;
-        }
-      } catch {
-        // Fall through to the original server error below.
-      }
       setAvatarStatus(error instanceof Error ? error.message : "キャスト登録に失敗しました");
     } finally {
       setAvatarLoading(false);
     }
-  }, [avatarFiles, avatarName, avatars.length, getAuthToken, loadAvatars, userEmail]);
+  }, [avatarFiles, avatarName, avatars.length, getAuthToken, loadAvatars]);
 
   const resetAvatarForm = useCallback(() => {
     setAvatarName("");
@@ -877,21 +695,30 @@ export default function Home() {
       }
 
       setEditResult(data.url);
-      saveLocalHistory(userEmail, {
-        prompt: `AI編集: ${editPrompt}`,
-        generated_image_url: data.url,
-        media_type: "image",
-        credits_used: 1,
-      });
       lastSavedEditResultRef.current = data.url;
-      setHistoryItems(current => mergeHistoryItems(current, loadLocalHistory(userEmail)));
+      try {
+        const token = await getAuthToken();
+        if (token) {
+          await fetch("/api/history", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              prompt: `AI編集: ${editPrompt}`,
+              generated_image_url: data.url,
+              media_type: "image",
+              credits_used: 1,
+            }),
+          });
+        }
+      } catch (e) { /* ignore */ }
+      void loadHistory();
       setEditStatus("編集が完了しました。");
     } catch (error) {
       setEditStatus(error instanceof Error ? error.message : "編集に失敗しました");
     } finally {
       setEditLoading(false);
     }
-  }, [editFile, editPrompt, editResolution, userEmail]);
+  }, [editFile, editPrompt, editResolution, loadHistory]);
 
   const resetEdit = useCallback(() => {
     setEditFile(null);
@@ -944,14 +771,23 @@ export default function Home() {
           clearInterval(videoPollRef.current!);
           setVideoRequestId(null);
           setVideoResult(data.videoUrl);
-          saveLocalHistory(userEmail, {
-            prompt: `${videoModel === "seedance" ? "Seedance動画" : "Grok動画"}: ${videoPrompt}`,
-            generated_image_url: data.videoUrl,
-            media_type: "video",
-            credits_used: videoModel === "seedance" ? Math.max(1, Math.round(videoDuration * 2)) : Math.max(1, Math.round(videoDuration * (videoResolution === "480p" ? 1 : 2))),
-          });
           lastSavedVideoResultRef.current = data.videoUrl;
-          setHistoryItems(current => mergeHistoryItems(current, loadLocalHistory(userEmail)));
+          try {
+            const token = await getAuthToken();
+            if (token) {
+              await fetch("/api/history", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                  prompt: `${videoModel === "seedance" ? "Seedance動画" : "Grok動画"}: ${videoPrompt}`,
+                  generated_image_url: data.videoUrl,
+                  media_type: "video",
+                  credits_used: videoModel === "seedance" ? Math.max(1, Math.round(videoDuration * 2)) : Math.max(1, Math.round(videoDuration * (videoResolution === "480p" ? 1 : 2))),
+                }),
+              });
+            }
+          } catch (e) { /* ignore */ }
+          void loadHistory();
           setVideoLoading(false);
           setVideoStatus("完成！");
         } else if (data.status === "failed") {
@@ -983,7 +819,7 @@ export default function Home() {
     void pollVideoStatus();
     videoPollRef.current = setInterval(() => void pollVideoStatus(), 5000);
     return () => { if (videoPollRef.current) clearInterval(videoPollRef.current); };
-  }, [videoDuration, videoModel, videoPrompt, videoRequestId, videoResolution, userEmail]);
+  }, [videoDuration, videoModel, videoPrompt, videoRequestId, videoResolution, loadHistory, getAuthToken]);
 
   useEffect(() => {
     if (tab === "avatar" || tab === "mosaic" || tab === "video") {
@@ -996,32 +832,6 @@ export default function Home() {
       void loadHistory();
     }
   }, [loadHistory, tab]);
-
-  useEffect(() => {
-    if (!editResult || lastSavedEditResultRef.current === editResult) return;
-
-    saveLocalHistory(userEmail, {
-      prompt: `AI編集: ${editPrompt}`,
-      generated_image_url: editResult,
-      media_type: "image",
-      credits_used: 1,
-    });
-    lastSavedEditResultRef.current = editResult;
-    setHistoryItems(current => mergeHistoryItems(current, loadLocalHistory(userEmail)));
-  }, [editPrompt, editResult, userEmail]);
-
-  useEffect(() => {
-    if (!videoResult || lastSavedVideoResultRef.current === videoResult) return;
-
-    saveLocalHistory(userEmail, {
-      prompt: `${videoModel === "seedance" ? "Seedance動画" : "Grok動画"}: ${videoPrompt}`,
-      generated_image_url: videoResult,
-      media_type: "video",
-      credits_used: videoModel === "seedance" ? Math.max(1, Math.round(videoDuration * 2)) : Math.max(1, Math.round(videoDuration * (videoResolution === "480p" ? 1 : 2))),
-    });
-    lastSavedVideoResultRef.current = videoResult;
-    setHistoryItems(current => mergeHistoryItems(current, loadLocalHistory(userEmail)));
-  }, [videoDuration, videoModel, videoPrompt, videoResolution, videoResult, userEmail]);
 
   useEffect(() => {
     void loadCredits();
@@ -1589,6 +1399,90 @@ export default function Home() {
             </div>
           ) : null}
 
+          {tab === "mypage" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={panelStyle}>
+                <div style={sectionLabelStyle}>アカウント設定</div>
+                <div style={{ fontSize: 22, fontWeight: 500, color: "#171717", marginBottom: 6 }}>マイページ</div>
+                <div style={{ fontSize: 12, color: "#4e4a43", lineHeight: 1.7, marginBottom: 16 }}>
+                  登録しているメールアドレスやパスワードを変更できます。
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 400 }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <span style={sectionLabelStyle}>新しいメールアドレス</span>
+                    <input
+                      type="email"
+                      value={mypageEmail}
+                      onChange={e => setMypageEmail(e.target.value)}
+                      placeholder={userEmail || "mail@example.com"}
+                      style={{
+                        width: "100%",
+                        padding: "11px 12px",
+                        borderRadius: 8,
+                        border: "1px solid #a89e8e",
+                        background: "rgba(0,0,0,0.06)",
+                        color: "#111",
+                        fontSize: 13,
+                        fontFamily: "inherit",
+                        outline: "none",
+                      }}
+                    />
+                  </label>
+
+                  <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <span style={sectionLabelStyle}>新しいパスワード</span>
+                    <input
+                      type="password"
+                      value={mypagePassword}
+                      onChange={e => setMypagePassword(e.target.value)}
+                      placeholder="変更する場合のみ入力"
+                      style={{
+                        width: "100%",
+                        padding: "11px 12px",
+                        borderRadius: 8,
+                        border: "1px solid #a89e8e",
+                        background: "rgba(0,0,0,0.06)",
+                        color: "#111",
+                        fontSize: 13,
+                        fontFamily: "inherit",
+                        outline: "none",
+                      }}
+                    />
+                  </label>
+
+                  {mypageStatus ? (
+                    <div
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 8,
+                        background: "rgba(0,0,0,0.06)",
+                        color: mypageStatus.includes("失敗") || mypageStatus.includes("エラー") ? "#b84242" : "#4a7c50",
+                        fontSize: 12,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {mypageStatus}
+                    </div>
+                  ) : null}
+
+                  <button
+                    onClick={() => void handleUpdateAccount()}
+                    disabled={mypageLoading}
+                    style={{
+                      ...actionButtonStyle,
+                      opacity: mypageLoading ? 0.5 : 1,
+                      cursor: mypageLoading ? "not-allowed" : "pointer",
+                      marginTop: 8,
+                    }}
+                  >
+                    {mypageLoading ? "更新中..." : "アカウント情報を更新する"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {tab === "avatar" ? (
             <div className="layout-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
               <div style={panelStyle}>
@@ -2028,7 +1922,6 @@ export default function Home() {
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 <div style={panelStyle}>
                   <div style={sectionLabelStyle}>モデル</div>
-                  <div style={{ fontSize: 18, fontWeight: 500, color: "#1a1a1a", marginBottom: 8 }}>Grok Imagine Quality Edit</div>
                   <div style={{ fontSize: 12, color: "#4e4a43", lineHeight: 1.7 }}>
                     Grokの画像編集APIで、元画像を参照しながら背景、質感、明るさ、文字除去などを編集します。顔は保持する指定を強めています。
                   </div>
