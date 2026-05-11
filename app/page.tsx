@@ -12,6 +12,7 @@ type MosaicMode = "blur" | "gaussian" | "simple";
 type VideoModel = "grok" | "seedance";
 type EditResolution = "1k" | "2k";
 type EditModel = "grok" | "lumiveil_v1.0";
+type EditModel = "grok" | "lumiveil_v1.0";
 type RegisteredAvatar = {
   id: string;
   name: string;
@@ -89,6 +90,7 @@ export default function Home() {
   const [editSrc, setEditSrc] = useState<string | null>(null);
   const [editPrompt, setEditPrompt] = useState("");
   const [editResolution, setEditResolution] = useState<EditResolution>("1k");
+  const [editModel, setEditModel] = useState<EditModel>("grok");
   const [editModel, setEditModel] = useState<EditModel>("grok");
   const [editLoading, setEditLoading] = useState(false);
   const [editResult, setEditResult] = useState<string | null>(null);
@@ -688,6 +690,7 @@ export default function Home() {
       const formData = new FormData();
       formData.append("file", editFile);
       formData.append("prompt", editPrompt);
+      formData.append("model", editModel);
       formData.append("model", editModel);
       formData.append("resolution", editResolution);
 
