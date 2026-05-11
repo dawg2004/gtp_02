@@ -99,6 +99,7 @@ export async function POST(req: NextRequest) {
     const { error } = await adminClient.from("generation_history").insert({
       shop_id,
       prompt: historyPrompt,
+      image_urls: generated_image_url ? [generated_image_url] : [],
       credits_used: credits_used || 1,
     });
 
