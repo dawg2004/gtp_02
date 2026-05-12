@@ -13,42 +13,6 @@ const FACE_PRESERVATION_PROMPT =
 const WATERMARK_REMOVAL_PROMPT =
   "Remove all watermarks, logos, text overlays, captions, signatures, brand marks, and UI artifacts from the image. Do not add any watermark, logo, text, caption, signature, or brand mark to the result.";
 
-async function uploadToFal(file: File): Promise<string> {
-  fal.config({ credentials: FAL_KEY });
-  return fal.storage.upload(file, { lifecycle: { expiresIn: "1d" } });
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    const cause = error.cause instanceof Error ? ` (${error.cause.message})` : "";
-    return `${error.name}: ${error.message}${cause}`;
-  }
-
-  return String(error);
-}
-
-function getFalEditError(status: number, body: string) {
-  let message = body;
-
-  try {
-    const parsed = JSON.parse(body) as { detail?: Array<{ msg?: string }> | string };
-    if (Array.isArray(parsed.detail)) {
-      message = parsed.detail.map(item => item.msg).filter(Boolean).join(" / ");
-    } else if (typeof parsed.detail === "string") {
-      message = parsed.detail;
-    }
-  } catch {
-    // Fall back to the raw response body below.
-  }
-
-  if (message.includes("content could not be processed")) {
-    return "Grok側の安全フィルターで編集できませんでした。露出や性的表現を弱めて、別の表現で試してください。";
-  }
-
-  const redacted = message.replace(/data:image\/[^"'\s]+/g, "[uploaded image]");
-  return `Grok編集に失敗しました。(${status}) ${redacted.slice(0, 240)}`;
-}
-
 function createBearerSupabaseClient(token: string) {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -58,6 +22,13 @@ function createBearerSupabaseClient(token: string) {
         headers: { Authorization: `Bearer ${token}` },
       },
     }
+  );
+}
+
+function createAdminSupabaseClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 }
 
@@ -74,14 +45,71 @@ async function getAuthenticatedContext(req: NextRequest): Promise<{ user: User |
   return { user, client: cookieSupabase };
 }
 
-async function saveGenerationHistory(client: SupabaseClient, userId: string, prompt: string, generatedUrl: string) {
-  const { data: shop } = await client
+async function uploadToFal(file: File): Promise<string> {
+  fal.config({ credentials: FAL_KEY });
+  return fal.storage.upload(file, { lifecycle: { expiresIn: "1d" } });
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const cause = error.cause instanceof Error ? ` (${error.cause.message})` : "";
+    return `${error.name}: ${error.message}${cause}`;
+  }
+  return String(error);
+}
+
+function getFalEditError(status: number, body: string) {
+  let message = body;
+
+  try {
+    const parsed = JSON.parse(body) as { detail?: Array<{ msg?: string }> | string };
+    if (Array.isArray(parsed.detail)) {
+      message = parsed.detail.map(item => item.msg).filter(Boolean).join(" / ");
+    } else if (typeof parsed.detail === "string") {
+      message = parsed.detail;
+    }
+  } catch {
+    // noop
+  }
+
+  if (message.includes("content could not be processed")) {
+    return "Grok側の安全フィルターで編集できませんでした。露出や性的表現を弱めて、別の表現で試してください。";
+  }
+
+  const redacted = message.replace(/data:image\\/[^"'\\s]+/g, "[uploaded image]");
+  return `Grok編集に失敗しました。(${status}) ${redacted.slice(0, 240)}`;
+}
+
+function encodeHistoryPrompt(input: { kind: "image" | "video"; prompt: string; url: string }) {
+  return `${HISTORY_PREFIX}${JSON.stringify(input)}`;
+}
+
+async function getShopRecord(client: SupabaseClient, userId: string) {
+  const { data, error } = await client
+    .from("shops")
+    .select("id, credits")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+async function saveGenerationHistory(adminClient: SupabaseClient, userId: string, prompt: string, generatedUrl: string) {
+  const { data: shop, error: shopError } = await adminClient
     .from("shops")
     .select("id")
     .eq("user_id", userId)
     .maybeSingle();
 
-  const { error } = await client.from("generation_history").insert({
+  if (shopError) {
+    throw new Error(shopError.message);
+  }
+
+  const { error } = await adminClient.from("generation_history").insert({
     shop_id: shop?.id ?? userId,
     avatar_id: null,
     prompt: encodeHistoryPrompt({
@@ -89,22 +117,51 @@ async function saveGenerationHistory(client: SupabaseClient, userId: string, pro
       prompt: `AI編集: ${prompt}`,
       url: generatedUrl,
     }),
+    image_urls: [generatedUrl],
+    settings: { media_type: "image" },
     credits_used: 1,
   });
 
   if (error) {
-    console.error("edit history insert failed", error.message);
+    throw new Error(error.message);
   }
 }
 
-function encodeHistoryPrompt(input: { kind: "image" | "video"; prompt: string; url: string }) {
-  return `${HISTORY_PREFIX}${JSON.stringify(input)}`;
+async function decrementCredits(adminClient: SupabaseClient, shopId: string, currentCredits: number) {
+  const nextCredits = Math.max(0, currentCredits - 1);
+
+  const { error } = await adminClient
+    .from("shops")
+    .update({ credits: nextCredits })
+    .eq("id", shopId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return nextCredits;
 }
 
 export async function POST(req: NextRequest) {
   try {
     if (!FAL_KEY) {
       return NextResponse.json({ error: "FAL_API_KEY is not configured" }, { status: 500 });
+    }
+
+    const { user, client } = await getAuthenticatedContext(req);
+    if (!user) {
+      return NextResponse.json({ error: "ログイン状態が切れています。もう一度ログインしてください。" }, { status: 401 });
+    }
+
+    const shop = await getShopRecord(client, user.id);
+    const currentCredits = Number(shop?.credits ?? 0);
+
+    if (!shop?.id) {
+      return NextResponse.json({ error: "ショップ情報が見つかりません。" }, { status: 400 });
+    }
+
+    if (currentCredits <= 0) {
+      return NextResponse.json({ error: "クレジット不足です。チャージ後に再度お試しください。" }, { status: 402 });
     }
 
     const formData = await req.formData();
@@ -148,14 +205,19 @@ export async function POST(req: NextRequest) {
 
     const data = await response.json();
     const url = data.images?.[0]?.url;
-    if (!url) throw new Error("URL not found");
-
-    const { user, client } = await getAuthenticatedContext(req);
-    if (user) {
-      await saveGenerationHistory(client, user.id, prompt, url);
+    if (!url) {
+      throw new Error("URL not found");
     }
 
-    return NextResponse.json({ url, revisedPrompt: data.revised_prompt ?? "" });
+    const adminClient = createAdminSupabaseClient();
+    await saveGenerationHistory(adminClient, user.id, prompt, url);
+    const credits = await decrementCredits(adminClient, shop.id, currentCredits);
+
+    return NextResponse.json({
+      url,
+      revisedPrompt: data.revised_prompt ?? "",
+      credits,
+    });
   } catch (error) {
     const msg = getErrorMessage(error);
     console.error("edit route failed", msg);
