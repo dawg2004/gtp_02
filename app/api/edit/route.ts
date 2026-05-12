@@ -76,7 +76,7 @@ function getFalEditError(status: number, body: string) {
     return "Grok側の安全フィルターで編集できませんでした。露出や性的表現を弱めて、別の表現で試してください。";
   }
 
-  const redacted = message.replace(/data:image\\/[^"'\\s]+/g, "[uploaded image]");
+  const redacted = message.replace(/data:image\/[^"'\\s]+/g, "[uploaded image]");
   return `Grok編集に失敗しました。(${status}) ${redacted.slice(0, 240)}`;
 }
 
