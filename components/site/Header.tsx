@@ -38,31 +38,39 @@ export function Header({ active = "HOME" }: { active?: string }) {
           aria-label={open ? "Close menu" : "Open menu"}
           aria-expanded={open}
           onClick={() => setOpen((current) => !current)}
-          className="grid size-10 place-items-center border border-stone-300 text-lg lg:hidden"
+          className="group grid size-11 place-items-center border border-stone-300 bg-[#fbfaf7] transition hover:bg-white lg:hidden"
         >
-          {open ? "x" : "="}
+          <span className="flex w-5 flex-col gap-1.5">
+            <span className={`h-px bg-stone-950 transition ${open ? "translate-y-[7px] rotate-45" : ""}`} />
+            <span className={`h-px bg-stone-950 transition ${open ? "opacity-0" : ""}`} />
+            <span className={`h-px bg-stone-950 transition ${open ? "-translate-y-[7px] -rotate-45" : ""}`} />
+          </span>
         </button>
       </div>
       {open ? (
         <div className="lg:hidden">
-          <button aria-label="Close menu overlay" className="fixed inset-0 z-40 bg-stone-950/25" onClick={() => setOpen(false)} />
-          <div className="fixed right-0 top-0 z-50 flex h-dvh w-[min(86vw,360px)] flex-col border-l border-stone-200 bg-[#f7f5ef] p-5 shadow-xl">
+          <button aria-label="Close menu overlay" className="drawer-backdrop fixed inset-0 z-40 bg-stone-950/35 backdrop-blur-[2px]" onClick={() => setOpen(false)} />
+          <div className="drawer-right fixed right-0 top-0 z-50 flex h-dvh w-[min(88vw,380px)] flex-col border-l border-stone-200 bg-[#f7f5ef] p-5 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <Link href="/" onClick={() => setOpen(false)} className="font-serif text-lg leading-none tracking-[0.08em] text-stone-950">
                 GOOD TIME
                 <span className="block">ARCHIVE</span>
               </Link>
-              <button aria-label="Close menu" onClick={() => setOpen(false)} className="grid size-10 place-items-center border border-stone-300 text-lg">
-                x
+              <button aria-label="Close menu" onClick={() => setOpen(false)} className="grid size-10 place-items-center border border-stone-300 bg-white text-lg">
+                <span className="relative block size-4">
+                  <span className="absolute left-0 top-1/2 h-px w-full rotate-45 bg-stone-950" />
+                  <span className="absolute left-0 top-1/2 h-px w-full -rotate-45 bg-stone-950" />
+                </span>
               </button>
             </div>
             <nav className="mt-10 flex flex-col border-y border-stone-200">
-              {navItems.map((item) => (
+              {navItems.map((item, index) => (
                 <Link
                   key={item}
                   href={item === "HOME" ? "/" : item === "EVENTS" ? "/events" : "#"}
                   onClick={() => setOpen(false)}
-                  className={`border-b border-stone-200 px-1 py-4 text-sm font-semibold tracking-[0.18em] last:border-b-0 ${
+                  style={{ animationDelay: `${70 + index * 34}ms` }}
+                  className={`menu-item-reveal border-b border-stone-200 px-1 py-4 text-sm font-semibold tracking-[0.18em] transition hover:pl-3 last:border-b-0 ${
                     active === item ? "text-stone-950" : "text-stone-600"
                   }`}
                 >

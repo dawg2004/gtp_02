@@ -38,3 +38,61 @@ a[href="/gpts"] {
   background: #1c1917;
   color: #f7f5ef;
 }
+
+@keyframes drawer-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes drawer-right-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes drawer-left-in {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes menu-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.drawer-backdrop {
+  animation: drawer-backdrop-in 180ms ease-out both;
+}
+
+.drawer-right {
+  animation: drawer-right-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.drawer-left {
+  animation: drawer-left-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.menu-item-reveal {
+  animation: menu-item-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
