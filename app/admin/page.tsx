@@ -3,6 +3,7 @@ import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { ContentComposer } from "@/components/admin/ContentComposer";
 import { EditorialTools } from "@/components/admin/EditorialTools";
 import { EventsTable } from "@/components/admin/EventsTable";
+import { PastArticlesEditor } from "@/components/admin/PastArticlesEditor";
 import { PublishingQueue } from "@/components/admin/PublishingQueue";
 import { QuickLinks } from "@/components/admin/QuickLinks";
 import { RecentActivity } from "@/components/admin/RecentActivity";
@@ -30,6 +31,9 @@ export default function AdminPage() {
         </div>
         <div className="mt-6">
           <EditorialTools />
+        </div>
+        <div className="mt-6">
+          <PastArticlesEditor />
         </div>
         <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <PublishingQueue />
