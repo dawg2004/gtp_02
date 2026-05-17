@@ -3,12 +3,23 @@ import { fal } from "@fal-ai/client";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
-const FAL_KEY = process.env.FAL_API_KEY!;
+const FAL_KEY = process.env.FAL_KEY || process.env.FAL_API_KEY || "";
 const HISTORY_PREFIX = "LUMIVEIL_HISTORY::";
 
 const MODEL_IDS: Record<string, string> = {
+  "grok-imagine": "xai/grok-imagine-video/image-to-video",
   grok: "xai/grok-imagine-video/image-to-video",
   seedance: "bytedance/seedance-2.0/fast/image-to-video",
+  "wan-i2v-flash": "fal-ai/wan/v2.6/image-to-video/flash",
+  "wan-reference-to-video": "fal-ai/wan/v2.6/reference-to-video",
+};
+
+const MODEL_LABELS: Record<string, string> = {
+  "grok-imagine": "Grok動画",
+  grok: "Grok動画",
+  seedance: "Seedance動画",
+  "wan-i2v-flash": "Wan Flash動画",
+  "wan-reference-to-video": "Wan Reference動画",
 };
 
 async function uploadToFal(file: File): Promise<string> {
@@ -77,7 +88,7 @@ async function saveVideoHistory({
   const shopId = shop?.id ?? userId;
   const historyPrompt = encodeHistoryPrompt({
     kind: "video",
-    prompt: `${model === "seedance" ? "Seedance動画" : "Grok動画"}: ${prompt}`,
+    prompt: `${MODEL_LABELS[model] ?? "動画"}: ${prompt}`,
     url: videoUrl,
   });
 
@@ -106,43 +117,69 @@ function encodeHistoryPrompt(input: { kind: "image" | "video"; prompt: string; u
   return `${HISTORY_PREFIX}${JSON.stringify(input)}`;
 }
 
+function getVideoCreditsUsed(model: string, duration: number, resolution: string) {
+  if (model === "wan-i2v-flash") return Math.max(1, Math.round(duration * 1));
+  if (model === "wan-reference-to-video") return Math.max(1, Math.round(duration * (resolution === "1080p" ? 3 : 2)));
+  if (model === "seedance") return Math.max(1, Math.round(duration * 2));
+  return Math.max(1, Math.round(duration * (resolution === "480p" ? 1 : 2)));
+}
+
+function mapCharacterReferences(prompt: string) {
+  return prompt.replace(/\bcharacter([123])\b/gi, "@Video$1");
+}
+
 export async function POST(req: NextRequest) {
   try {
     if (!FAL_KEY) {
-      return NextResponse.json({ error: "FAL_API_KEY is not configured" }, { status: 500 });
+      return NextResponse.json({ error: "FAL_KEY is not configured" }, { status: 500 });
     }
     configureFal();
 
     const formData = await req.formData();
     const file = formData.get("file");
-    const model = String(formData.get("model") ?? "grok");
+    const model = String(formData.get("model") ?? "grok-imagine");
     const prompt = String(formData.get("prompt") ?? "natural movement, cinematic");
     const duration = Number(formData.get("duration") ?? 5);
     const resolution = String(formData.get("resolution") ?? "720p");
-
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "file is required" }, { status: 400 });
-    }
+    const aspectRatio = String(formData.get("aspectRatio") ?? "9:16");
+    const referenceVideoUrls = [1, 2, 3]
+      .map(index => String(formData.get(`referenceVideoUrl${index}`) ?? "").trim())
+      .filter(Boolean);
 
     const modelId = MODEL_IDS[model];
     if (!modelId) {
       return NextResponse.json({ error: "invalid model" }, { status: 400 });
     }
 
-    const imageUrl = await uploadToFal(file);
     const input: Record<string, unknown> = {
-      image_url: imageUrl,
       prompt,
       resolution,
     };
+
+    if (model === "wan-reference-to-video") {
+      if (referenceVideoUrls.length === 0) {
+        return NextResponse.json({ error: "reference video url is required" }, { status: 400 });
+      }
+      input.prompt = mapCharacterReferences(prompt);
+      input.video_urls = referenceVideoUrls;
+      input.aspect_ratio = aspectRatio;
+      input.duration = String(duration === 10 ? 10 : 5);
+    } else {
+      if (!(file instanceof File)) {
+        return NextResponse.json({ error: "file is required" }, { status: 400 });
+      }
+      input.image_url = await uploadToFal(file);
+    }
 
     if (model === "seedance") {
       input.duration = Math.min(15, Math.max(4, duration || 5));
       input.aspect_ratio = "auto";
       input.generate_audio = true;
-    } else {
+    } else if (model === "wan-i2v-flash") {
+      input.duration = String(duration === 10 ? 10 : 5);
+    } else if (model === "grok" || model === "grok-imagine") {
       input.duration = duration;
-      input.aspect_ratio = "auto";
+      input.aspect_ratio = aspectRatio;
     }
 
     const data = await fal.queue.submit(modelId, {
@@ -163,7 +200,7 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const requestId = searchParams.get("requestId");
-  const model = searchParams.get("model") ?? "grok";
+  const model = searchParams.get("model") ?? "grok-imagine";
   const prompt = searchParams.get("prompt") ?? "video generation";
   const duration = Number(searchParams.get("duration") ?? 5);
   const resolution = searchParams.get("resolution") ?? "720p";
@@ -179,7 +216,7 @@ export async function GET(req: NextRequest) {
 
   try {
     if (!FAL_KEY) {
-      return NextResponse.json({ error: "FAL_API_KEY is not configured" }, { status: 500 });
+      return NextResponse.json({ error: "FAL_KEY is not configured" }, { status: 500 });
     }
     configureFal();
 
@@ -190,14 +227,14 @@ export async function GET(req: NextRequest) {
 
     if (statusData.status === "COMPLETED") {
       const result = await fal.queue.result(modelId, { requestId });
-      const resultData = result.data as { video?: { url?: string } };
-      const videoUrl = resultData.video?.url;
+      const resultData = result.data as { video?: { url?: string }; videos?: Array<{ url?: string }> };
+      const videoUrl = resultData.video?.url ?? resultData.videos?.[0]?.url;
       if (!videoUrl) {
         throw new Error("result video url is missing");
       }
       const { user, client } = await getAuthenticatedContext(req);
       if (user) {
-        const creditsUsed = model === "seedance" ? Math.max(1, Math.round(duration * 2)) : Math.max(1, Math.round(duration * (resolution === "480p" ? 1 : 2)));
+        const creditsUsed = getVideoCreditsUsed(model, duration, resolution);
         await saveVideoHistory({
           client,
           userId: user.id,

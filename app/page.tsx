@@ -9,7 +9,7 @@ type TabId = "generate" | "avatar" | "mosaic" | "edit" | "video" | "history" | "
 type MosaicBox = { x: number; y: number; width: number; height: number };
 type ImageSize = { width: number; height: number };
 type MosaicMode = "blur" | "gaussian" | "simple";
-type VideoModel = "grok" | "seedance";
+type VideoModel = "grok-imagine" | "wan-i2v-flash" | "wan-reference-to-video";
 type EditResolution = "1k" | "2k";
 type EditModel = "grok" | "lumiveil_v1.0";
 type RegisteredAvatar = {
@@ -48,10 +48,34 @@ const PHOTO_CREDITS_ESTIMATE = 1;
 const VIDEO_CREDITS_ESTIMATE = 8;
 const MAX_AVATARS = 200;
 const TOPUP_PACK_LIST = Object.entries(TOPUP_PACKS).map(([id, pack]) => ({ id: id as TopupPackId, ...pack }));
+const VIDEO_ASPECT_RATIO = "9:16";
+const VIDEO_MODEL_OPTIONS: Array<{ id: VideoModel; label: string; detail: string }> = [
+  { id: "grok-imagine", label: "Grok Imagine", detail: "高品質・音声付き本番用" },
+  { id: "wan-i2v-flash", label: "Wan Flash", detail: "低コスト・ラフ確認用" },
+  { id: "wan-reference-to-video", label: "Wan Reference", detail: "顔・キャラ維持用" },
+];
 
 function isVideoHistoryUrl(url: string) {
   const cleanUrl = url.split("?")[0].toLowerCase();
   return cleanUrl.endsWith(".mp4") || cleanUrl.endsWith(".webm") || cleanUrl.endsWith(".mov");
+}
+
+function getVideoModelHistoryLabel(model: VideoModel) {
+  if (model === "wan-i2v-flash") return "Wan Flash動画";
+  if (model === "wan-reference-to-video") return "Wan Reference動画";
+  return "Grok動画";
+}
+
+function estimateVideoCredits(model: VideoModel, duration: number, resolution: string) {
+  if (model === "wan-i2v-flash") return Math.max(1, Math.round(duration * 1));
+  if (model === "wan-reference-to-video") return Math.max(1, Math.round(duration * (resolution === "1080p" ? 3 : 2)));
+  return Math.max(1, Math.round(duration * (resolution === "1080p" ? 3 : 2)));
+}
+
+function estimateVideoUsd(model: VideoModel, duration: number, resolution: string) {
+  if (model === "wan-i2v-flash") return duration * 0.04;
+  if (model === "wan-reference-to-video") return duration * (resolution === "1080p" ? 0.16 : 0.1);
+  return duration * (resolution === "1080p" ? 0.12 : 0.07);
 }
 
 async function imageUrlToFile(url: string, name: string) {
@@ -161,10 +185,11 @@ export default function Home() {
 
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
-  const [videoModel, setVideoModel] = useState<VideoModel>("grok");
+  const [videoModel, setVideoModel] = useState<VideoModel>("grok-imagine");
   const [videoPrompt, setVideoPrompt] = useState("natural movement, cinematic");
   const [videoDuration, setVideoDuration] = useState(5);
   const [videoResolution, setVideoResolution] = useState("720p");
+  const [videoReferenceUrls, setVideoReferenceUrls] = useState(["", "", ""]);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoResult, setVideoResult] = useState<string | null>(null);
   const [videoRequestId, setVideoRequestId] = useState<string | null>(null);
@@ -796,17 +821,29 @@ export default function Home() {
   }, []);
 
   const submitVideo = useCallback(async () => {
-    if (!videoFile) return;
+    const isReferenceModel = videoModel === "wan-reference-to-video";
+    const referenceUrls = videoReferenceUrls.map(url => url.trim()).filter(Boolean);
+    if (!isReferenceModel && !videoFile) return;
+    if (isReferenceModel && referenceUrls.length === 0) {
+      setVideoStatus("参照動画URLを1本以上入力してください。");
+      return;
+    }
     setVideoLoading(true);
-    setVideoStatus("画像をアップロード中...");
+    setVideoStatus(isReferenceModel ? "参照動画を確認中..." : "画像をアップロード中...");
     videoPollErrorCountRef.current = 0;
     try {
       const formData = new FormData();
-      formData.append("file", videoFile);
+      if (videoFile) {
+        formData.append("file", videoFile);
+      }
       formData.append("model", videoModel);
       formData.append("prompt", videoPrompt);
       formData.append("duration", String(videoDuration));
       formData.append("resolution", videoResolution);
+      formData.append("aspectRatio", VIDEO_ASPECT_RATIO);
+      referenceUrls.forEach((url, index) => {
+        formData.append(`referenceVideoUrl${index + 1}`, url);
+      });
       const res = await fetch("/api/video", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error ?? "提出に失敗しました");
@@ -816,7 +853,7 @@ export default function Home() {
       setVideoStatus(error instanceof Error ? error.message : "エラーが発生しました");
       setVideoLoading(false);
     }
-  }, [videoDuration, videoFile, videoModel, videoPrompt, videoResolution]);
+  }, [videoDuration, videoFile, videoModel, videoPrompt, videoReferenceUrls, videoResolution]);
 
   useEffect(() => {
     if (!videoRequestId) return;
@@ -847,10 +884,10 @@ export default function Home() {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                 body: JSON.stringify({
-                  prompt: `${videoModel === "seedance" ? "Seedance動画" : "Grok動画"}: ${videoPrompt}`,
+                  prompt: `${getVideoModelHistoryLabel(videoModel)}: ${videoPrompt}`,
                   generated_image_url: data.videoUrl,
                   media_type: "video",
-                  credits_used: videoModel === "seedance" ? Math.max(1, Math.round(videoDuration * 2)) : Math.max(1, Math.round(videoDuration * (videoResolution === "480p" ? 1 : 2))),
+                  credits_used: estimateVideoCredits(videoModel, videoDuration, videoResolution),
                 }),
               });
             }
@@ -2073,57 +2110,97 @@ export default function Home() {
           {tab === "video" ? (
             <div className="layout-grid" style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: 20 }}>
               <div style={panelStyle}>
-                <div style={sectionLabelStyle}>元画像</div>
-                <label style={uploadButtonStyle}>
-                  画像を選択する
-                  <input
-                    type="file"
-                    accept="image/*"
-                    style={{ display: "none" }}
-                    onChange={e => e.target.files?.[0] && handleVideoUpload(e.target.files[0])}
-                  />
-                </label>
-
-                {avatars.length > 0 ? (
-                  <div style={{ marginTop: 14 }}>
-                    <div style={{ ...sectionLabelStyle, marginBottom: 8 }}>登録済みキャストから選択</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(118px, 1fr))", gap: 10 }}>
-                      {avatars.map(avatar => (
-                        <button
-                          key={`video-${avatar.id}`}
-                          onClick={() => void useAvatarForVideo(avatar)}
-                          disabled={!avatar.face_image_url || videoLoading}
+                {videoModel === "wan-reference-to-video" ? (
+                  <>
+                    <div style={sectionLabelStyle}>参照動画</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {videoReferenceUrls.map((url, index) => (
+                        <input
+                          key={`reference-video-${index}`}
+                          value={url}
+                          onChange={e => {
+                            const next = [...videoReferenceUrls];
+                            next[index] = e.target.value;
+                            setVideoReferenceUrls(next);
+                          }}
+                          placeholder={`character${index + 1} 参照動画URL${index === 0 ? "（必須）" : "（任意）"}`}
                           style={{
-                            padding: 0,
-                            overflow: "hidden",
-                            borderRadius: 10,
+                            width: "100%",
+                            padding: "10px 12px",
+                            borderRadius: 8,
+                            background: "rgba(0,0,0,0.08)",
                             border: "1px solid #a89e8e",
-                            background: "rgba(0,0,0,0.06)",
-                            cursor: !avatar.face_image_url || videoLoading ? "not-allowed" : "pointer",
-                            opacity: !avatar.face_image_url || videoLoading ? 0.5 : 1,
-                            textAlign: "left",
+                            color: "#111",
+                            fontSize: 12,
                             fontFamily: "inherit",
                           }}
-                        >
-                          <div style={{ aspectRatio: "1 / 1", background: "#111" }}>
-                            {avatar.face_image_url ? (
-                              <img src={avatar.face_image_url} alt={avatar.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                            ) : null}
-                          </div>
-                          <div style={{ padding: "8px 9px", color: "#111", fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {avatar.name}
-                          </div>
-                        </button>
+                        />
                       ))}
                     </div>
-                  </div>
+                    <div style={{ marginTop: 10, fontSize: 11, lineHeight: 1.7, color: "#6a6258" }}>
+                      プロンプト内で character1 / character2 / character3 と書くと、それぞれの参照動画として扱います。
+                    </div>
+                    {videoLoading ? (
+                      <div style={{ marginTop: 14, position: "relative", minHeight: 160, borderRadius: 10, background: "rgba(0,0,0,0.08)" }}>
+                        <LoadingExperience label="動画を生成中" detail={videoStatus || "参照動画から動きを作っています。"} overlay />
+                      </div>
+                    ) : null}
+                  </>
                 ) : (
-                  <div style={{ marginTop: 10, fontSize: 11, color: "#6a6258" }}>
-                    キャスト登録すると、ここから画像を選べます。
-                  </div>
+                  <>
+                    <div style={sectionLabelStyle}>元画像</div>
+                    <label style={uploadButtonStyle}>
+                      画像を選択する
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: "none" }}
+                        onChange={e => e.target.files?.[0] && handleVideoUpload(e.target.files[0])}
+                      />
+                    </label>
+
+                    {avatars.length > 0 ? (
+                      <div style={{ marginTop: 14 }}>
+                        <div style={{ ...sectionLabelStyle, marginBottom: 8 }}>登録済みキャストから選択</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(118px, 1fr))", gap: 10 }}>
+                          {avatars.map(avatar => (
+                            <button
+                              key={`video-${avatar.id}`}
+                              onClick={() => void useAvatarForVideo(avatar)}
+                              disabled={!avatar.face_image_url || videoLoading}
+                              style={{
+                                padding: 0,
+                                overflow: "hidden",
+                                borderRadius: 10,
+                                border: "1px solid #a89e8e",
+                                background: "rgba(0,0,0,0.06)",
+                                cursor: !avatar.face_image_url || videoLoading ? "not-allowed" : "pointer",
+                                opacity: !avatar.face_image_url || videoLoading ? 0.5 : 1,
+                                textAlign: "left",
+                                fontFamily: "inherit",
+                              }}
+                            >
+                              <div style={{ aspectRatio: "1 / 1", background: "#111" }}>
+                                {avatar.face_image_url ? (
+                                  <img src={avatar.face_image_url} alt={avatar.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                                ) : null}
+                              </div>
+                              <div style={{ padding: "8px 9px", color: "#111", fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {avatar.name}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: 10, fontSize: 11, color: "#6a6258" }}>
+                        キャスト登録すると、ここから画像を選べます。
+                      </div>
+                    )}
+                  </>
                 )}
 
-                {videoSrc && (
+                {videoModel !== "wan-reference-to-video" && videoSrc && (
                   <div style={{ marginTop: 14, borderRadius: 10, overflow: "hidden", background: "#000", border: "1px solid rgba(255,255,255,0.08)", position: "relative" }}>
                     <img src={videoSrc} alt="元画像" style={{ width: "100%", maxHeight: 360, objectFit: "contain", display: "block" }} />
                     {videoLoading ? (
@@ -2162,25 +2239,27 @@ export default function Home() {
 
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 <div style={panelStyle}>
-                  <div style={sectionLabelStyle}>モデル</div>
-                  <div style={buttonRowStyle}>
-                    {(["grok", "seedance"] as VideoModel[]).map(id => (
+                  <div style={sectionLabelStyle}>動画生成モデル選択</div>
+                  <div style={{ ...buttonRowStyle, alignItems: "stretch" }}>
+                    {VIDEO_MODEL_OPTIONS.map(option => (
                       <button
-                        key={id}
+                        key={option.id}
                         onClick={() => {
-                          setVideoModel(id);
-                          setVideoResolution(id === "grok" ? "720p" : "720p");
+                          setVideoModel(option.id);
+                          setVideoResolution("720p");
+                          setVideoStatus("");
                         }}
-                        style={choiceButtonStyle(videoModel === id)}
+                        style={{ ...choiceButtonStyle(videoModel === option.id), minHeight: 76, textAlign: "left", padding: "10px 12px" }}
                       >
-                        {id === "grok" ? "Grok" : "Seedance 2"}
+                        <span style={{ display: "block", fontSize: 13, marginBottom: 5 }}>{option.label}</span>
+                        <span style={{ display: "block", fontSize: 10, lineHeight: 1.45, color: videoModel === option.id ? "#1f1b13" : "#5c564f" }}>
+                          {option.detail}
+                        </span>
                       </button>
                     ))}
                   </div>
                   <div style={{ marginTop: 8, fontSize: 11, color: "#6a6258" }}>
-                    {videoModel === "grok"
-                      ? "xAI Grok Imagine — $0.05/s (480p) · $0.07/s (720p)"
-                      : "ByteDance Seedance 2.0 Fast — $0.24/s"}
+                    Grok Imagineは導入済みです。Wan Referenceではプロンプトに character1 / character2 / character3 を指定できます。
                   </div>
                 </div>
 
@@ -2218,11 +2297,14 @@ export default function Home() {
                 <div style={panelStyle}>
                   <div style={sectionLabelStyle}>解像度</div>
                   <div style={buttonRowStyle}>
-                    {["480p", "720p"].map(r => (
+                    {["720p", "1080p"].map(r => (
                       <button key={r} onClick={() => setVideoResolution(r)} style={choiceButtonStyle(videoResolution === r)}>
                         {r}
                       </button>
                     ))}
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 11, color: "#6a6258" }}>
+                    Aspect ratio: {VIDEO_ASPECT_RATIO}
                   </div>
                 </div>
 
@@ -2243,18 +2325,18 @@ export default function Home() {
                   ) : null}
                   <button
                     onClick={() => void submitVideo()}
-                    disabled={!videoFile || videoLoading}
+                    disabled={(videoModel === "wan-reference-to-video" ? videoReferenceUrls.every(url => !url.trim()) : !videoFile) || videoLoading}
                     style={{
                       ...actionButtonStyle,
                       width: "100%",
-                      opacity: !videoFile || videoLoading ? 0.5 : 1,
-                      cursor: !videoFile || videoLoading ? "not-allowed" : "pointer",
+                      opacity: ((videoModel === "wan-reference-to-video" ? videoReferenceUrls.every(url => !url.trim()) : !videoFile) || videoLoading) ? 0.5 : 1,
+                      cursor: ((videoModel === "wan-reference-to-video" ? videoReferenceUrls.every(url => !url.trim()) : !videoFile) || videoLoading) ? "not-allowed" : "pointer",
                     }}
                   >
                     {videoLoading ? "生成中..." : "動画を生成する"}
                   </button>
                   <div style={{ marginTop: 8, fontSize: 11, color: "#6a6258", textAlign: "center" }}>
-                    推定コスト: ${(videoDuration * (videoModel === "grok" ? (videoResolution === "480p" ? 0.05 : 0.07) : 0.242)).toFixed(2)}
+                    推定コスト: ${estimateVideoUsd(videoModel, videoDuration, videoResolution).toFixed(2)} / 目安 {estimateVideoCredits(videoModel, videoDuration, videoResolution)}クレジット
                   </div>
                 </div>
               </div>
