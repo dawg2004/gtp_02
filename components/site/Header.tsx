@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const navItems = ["HOME", "EVENTS", "ARTICLES", "VIDEOS", "PHOTOS", "PARTNERS", "ABOUT"];
+const navItems = ["HOME", "EVENTS", "ARTICLES", "VIDEOS", "PHOTOS", "ABOUT"];
 
 export function Header({ active = "HOME" }: { active?: string }) {
   return (

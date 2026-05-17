@@ -1,9 +1,13 @@
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
+import { ContentComposer } from "@/components/admin/ContentComposer";
+import { EditorialTools } from "@/components/admin/EditorialTools";
 import { EventsTable } from "@/components/admin/EventsTable";
+import { PublishingQueue } from "@/components/admin/PublishingQueue";
 import { QuickLinks } from "@/components/admin/QuickLinks";
 import { RecentActivity } from "@/components/admin/RecentActivity";
 import { StatCard } from "@/components/admin/StatCard";
+import { VideoLinksManager } from "@/components/admin/VideoLinksManager";
 
 export default function AdminPage() {
   return (
@@ -20,6 +24,16 @@ export default function AdminPage() {
         <div className="mt-6 grid gap-6 xl:grid-cols-2">
           <RecentActivity />
           <QuickLinks />
+        </div>
+        <div id="new-post" className="mt-6 scroll-mt-6">
+          <ContentComposer />
+        </div>
+        <div className="mt-6">
+          <EditorialTools />
+        </div>
+        <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <PublishingQueue />
+          <VideoLinksManager />
         </div>
         <div className="mt-6">
           <EventsTable />

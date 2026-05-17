@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const items = ["Dashboard", "Events", "Articles", "Videos", "Media Library", "Categories", "Comments", "Partners", "Pages", "Settings"];
+const items = ["Dashboard", "New Post", "Events", "Articles", "Videos", "Media Library", "Categories", "Comments", "Pages", "Settings"];
 
 export function AdminSidebar() {
   return (
@@ -11,7 +11,7 @@ export function AdminSidebar() {
       </Link>
       <nav className="mt-10 flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
         {items.map((item) => (
-          <a key={item} href="#" className={`whitespace-nowrap px-4 py-3 text-sm ${item === "Dashboard" ? "bg-stone-950 text-white" : "text-stone-600 hover:bg-white"}`}>
+          <a key={item} href={item === "New Post" ? "#new-post" : "#"} className={`whitespace-nowrap px-4 py-3 text-sm ${item === "Dashboard" ? "bg-stone-950 text-white" : "text-stone-600 hover:bg-white"}`}>
             {item}
           </a>
         ))}
