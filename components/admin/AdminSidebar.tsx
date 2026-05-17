@@ -14,7 +14,7 @@ export function AdminSidebar() {
           key={item}
           href={item === "New Post" ? "#new-post" : "#"}
           onClick={() => setOpen(false)}
-          style={animated ? { animationDelay: `${70 + index * 28}ms` } : undefined}
+          style={animated ? { animationDelay: `${180 + index * 48}ms` } : undefined}
           className={`${animated ? "menu-item-reveal" : ""} whitespace-nowrap px-4 py-3 text-sm transition hover:pl-5 ${
             item === "Dashboard" ? "bg-stone-950 text-white" : "text-stone-600 hover:bg-white"
           }`}

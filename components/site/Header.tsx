@@ -69,7 +69,7 @@ export function Header({ active = "HOME" }: { active?: string }) {
                   key={item}
                   href={item === "HOME" ? "/" : item === "EVENTS" ? "/events" : "#"}
                   onClick={() => setOpen(false)}
-                  style={{ animationDelay: `${70 + index * 34}ms` }}
+                  style={{ animationDelay: `${180 + index * 58}ms` }}
                   className={`menu-item-reveal border-b border-stone-200 px-1 py-4 text-sm font-semibold tracking-[0.18em] transition hover:pl-3 last:border-b-0 ${
                     active === item ? "text-stone-950" : "text-stone-600"
                   }`}
