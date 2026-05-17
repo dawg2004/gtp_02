@@ -2,6 +2,13 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function proxy(request: NextRequest) {
+  const publicPaths = ['/', '/events', '/admin', '/login']
+  const isPublicPath = publicPaths.some((path) => (
+    path === '/'
+      ? request.nextUrl.pathname === '/'
+      : request.nextUrl.pathname === path || request.nextUrl.pathname.startsWith(`${path}/`)
+  ))
+
   // Stripe webhookはそのまま通す
   if (request.nextUrl.pathname.startsWith('/api/stripe/webhook')) {
     return NextResponse.next()
@@ -30,7 +37,7 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user && !request.nextUrl.pathname.startsWith('/login')) {
+  if (!user && !isPublicPath) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     const redirect = NextResponse.redirect(url)

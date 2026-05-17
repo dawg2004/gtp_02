@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LUMIVEIL",
-  description: "AI-powered cast registration and video generation",
+  title: "GOOD TIME ARCHIVE",
+  description: "Studio event archive for reports, photos, and video links.",
 };
 
 export default function RootLayout({

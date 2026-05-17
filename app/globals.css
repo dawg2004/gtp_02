@@ -1,9 +1,10 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f7f5ef;
+  --foreground: #1c1917;
   --font-lumiveil-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
+  --font-goodtime-serif: Georgia, "Times New Roman", serif;
 }
 
 @theme inline {
@@ -11,13 +12,6 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
@@ -33,4 +27,14 @@ body {
 
 a[href="/gpts"] {
   display: none !important;
+}
+
+.font-serif {
+  font-family: var(--font-goodtime-serif);
+  font-weight: 400;
+}
+
+::selection {
+  background: #1c1917;
+  color: #f7f5ef;
 }
