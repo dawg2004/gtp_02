@@ -100,13 +100,13 @@ a[href="/gpts"] {
 }
 
 .drawer-right {
-  animation: drawer-right-in 620ms cubic-bezier(0.2, 0.9, 0.18, 1) both;
+  animation: drawer-right-in 800ms cubic-bezier(0.2, 0.9, 0.18, 1) both;
 }
 
 .drawer-left {
-  animation: drawer-left-in 620ms cubic-bezier(0.2, 0.9, 0.18, 1) both;
+  animation: drawer-left-in 800ms cubic-bezier(0.2, 0.9, 0.18, 1) both;
 }
 
 .menu-item-reveal {
-  animation: menu-item-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: menu-item-in 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
