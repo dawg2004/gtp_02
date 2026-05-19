@@ -8,9 +8,9 @@ export function HeroFeaturedEvent() {
       <div className="relative min-h-[520px] overflow-hidden bg-stone-950 sm:min-h-[460px]">
         <img src={event.image} alt={event.title} className="absolute inset-0 h-full w-full object-cover opacity-70" />
         <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/45 to-transparent" />
-        <div className="relative flex min-h-[520px] max-w-2xl flex-col justify-end p-6 text-white sm:min-h-[460px] sm:p-10">
+        <div className="relative flex min-h-[520px] max-w-[calc(100%-2rem)] flex-col justify-end p-6 text-white sm:min-h-[460px] sm:p-10 lg:max-w-5xl">
           <p className="text-xs font-semibold tracking-[0.22em]">FEATURED EVENT</p>
-          <h1 className="mt-4 font-serif text-5xl leading-none sm:text-7xl">{event.title}</h1>
+          <h1 className="mt-4 whitespace-nowrap font-serif text-[clamp(2.6rem,8vw,6.5rem)] leading-none">{event.title}</h1>
           <p className="mt-5 text-lg leading-8 text-stone-100">{event.subtitle}</p>
           <div className="mt-5 flex flex-wrap gap-4 text-sm text-stone-200">
             <span>{formatEventDate(event.date)}</span>
