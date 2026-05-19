@@ -1,4 +1,9 @@
-const activities = ["Fermentation Workshop report published", "Jazz in the Studio scheduled", "New gallery uploaded", "Creator Talk draft updated"];
+const activities = [
+  "発酵ワークショップのレポートを公開",
+  "スタジオで聴くジャズの夜を予約投稿に設定",
+  "写真ギャラリーに新しい画像を追加",
+  "クリエイタートーク Vol.2 の下書きを更新",
+];
 
 export function RecentActivity() {
   return (

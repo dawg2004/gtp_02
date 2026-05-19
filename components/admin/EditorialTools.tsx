@@ -1,8 +1,8 @@
 const tools = [
-  ["Article Editor", "Write reports, set excerpts, and attach a cover image."],
-  ["Photo Gallery", "Arrange event images and alt text for archive pages."],
-  ["Event Settings", "Manage date, location, category, host, and ticket details."],
-  ["Supabase Ready", "Fixed data today, database-backed publishing later."],
+  ["記事編集", "レポート本文、抜粋、カバー画像を編集できます。"],
+  ["写真ギャラリー", "イベント写真の並び順とaltテキストを管理します。"],
+  ["イベント設定", "日付、場所、カテゴリ、ホスト、チケット情報を編集します。"],
+  ["Supabase準備", "今は固定データ、次にDB投稿へ差し替えやすい構成です。"],
 ];
 
 export function EditorialTools() {

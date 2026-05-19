@@ -1,10 +1,10 @@
 const rows = [
-  ["Fermentation Workshop", "Workshop", "Published", "May 18, 2025"],
-  ["Analog Nights", "Music", "Published", "Feb 14, 2025"],
-  ["Designing Community", "Talk", "Published", "Apr 26, 2025"],
-  ["Bread Baking Workshop", "Workshop", "Published", "Jan 19, 2025"],
-  ["Jazz in the Studio", "Music", "Scheduled", "Jun 12, 2025"],
-  ["Film Photography Walk", "Photo Walk", "Draft", "Mar 22, 2025"],
+  ["発酵ワークショップ", "Workshop", "Published", "2025年5月18日"],
+  ["アナログナイツ・ライブセッション", "Music", "Published", "2025年2月14日"],
+  ["コミュニティを育てるデザイン", "Talk", "Published", "2025年4月26日"],
+  ["パン作りワークショップ", "Workshop", "Published", "2025年1月19日"],
+  ["スタジオで聴くジャズの夜", "Music", "Scheduled", "2025年6月12日"],
+  ["フィルム写真ウォーク", "Photo Walk", "Draft", "2025年3月22日"],
 ];
 
 export function EventsTable() {
