@@ -1,0 +1,246 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f7f5ef;
+  --foreground: #1c1917;
+  --font-lumiveil-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
+  --font-goodtime-serif: Georgia, "Times New Roman", serif;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-lumiveil-sans);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  font-synthesis-weight: none;
+}
+
+a[href="/gpts"] {
+  display: none !important;
+}
+
+.font-serif {
+  font-family: var(--font-goodtime-serif);
+  font-weight: 400;
+}
+
+::selection {
+  background: #1c1917;
+  color: #f7f5ef;
+}
+
+@keyframes drawer-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes drawer-right-in {
+  from {
+    opacity: 0;
+    transform: translateX(100%) scaleX(0.96);
+    transform-origin: right center;
+  }
+  72% {
+    opacity: 1;
+    transform: translateX(-10px) scaleX(1.015);
+    transform-origin: right center;
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scaleX(1);
+    transform-origin: right center;
+  }
+}
+
+@keyframes drawer-left-in {
+  from {
+    opacity: 0;
+    transform: translateX(-100%) scaleX(0.96);
+    transform-origin: left center;
+  }
+  72% {
+    opacity: 1;
+    transform: translateX(10px) scaleX(1.015);
+    transform-origin: left center;
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scaleX(1);
+    transform-origin: left center;
+  }
+}
+
+@keyframes menu-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes hero-drift {
+  from {
+    transform: scale(1.02) translate3d(0, 0, 0);
+  }
+  50% {
+    transform: scale(1.08) translate3d(-1.2%, -0.8%, 0);
+  }
+  to {
+    transform: scale(1.04) translate3d(1%, 0.6%, 0);
+  }
+}
+
+@keyframes subtle-float {
+  from,
+  to {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes pulse-ring {
+  from {
+    opacity: 0.7;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.75);
+  }
+}
+
+@keyframes marquee-drift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-24px);
+  }
+}
+
+.drawer-backdrop {
+  animation: drawer-backdrop-in 340ms ease-out both;
+}
+
+.drawer-right {
+  animation: drawer-right-in 800ms cubic-bezier(0.2, 0.9, 0.18, 1) both;
+}
+
+.drawer-left {
+  animation: drawer-left-in 800ms cubic-bezier(0.2, 0.9, 0.18, 1) both;
+}
+
+.menu-item-reveal {
+  animation: menu-item-in 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.hero-drift {
+  animation: hero-drift 18s ease-in-out infinite alternate;
+}
+
+.interactive-card {
+  transform: translateY(0);
+  transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 420ms ease, border-color 420ms ease;
+}
+
+.interactive-card:hover {
+  border-color: #a8a29e;
+  box-shadow: 0 18px 45px rgb(28 25 23 / 0.12);
+  transform: translateY(-6px);
+}
+
+.interactive-card:hover .interactive-image {
+  transform: scale(1.08);
+}
+
+.interactive-image {
+  transition: transform 700ms cubic-bezier(0.16, 1, 0.3, 1), filter 700ms ease;
+}
+
+.interactive-card:hover .interactive-image {
+  filter: saturate(1.05) contrast(1.04);
+}
+
+.interactive-logo {
+  transition: color 260ms ease, transform 260ms ease, letter-spacing 260ms ease;
+}
+
+.interactive-logo:hover {
+  color: #1c1917;
+  letter-spacing: 0.18em;
+  transform: translateY(-2px);
+}
+
+.float-on-hover:hover {
+  animation: subtle-float 900ms ease-in-out infinite;
+}
+
+.cta-arrow::after {
+  content: " ->";
+  display: inline-block;
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity 260ms ease, transform 260ms ease;
+}
+
+.cta-arrow:hover::after {
+  opacity: 1;
+  transform: translateX(4px);
+}
+
+.pulse-control {
+  position: relative;
+}
+
+.pulse-control::before {
+  animation: pulse-ring 1.8s ease-out infinite;
+  border: 1px solid rgb(255 255 255 / 0.6);
+  content: "";
+  inset: -7px;
+  position: absolute;
+}
+
+.interactive-card::after {
+  background: linear-gradient(135deg, transparent 0%, rgb(255 255 255 / 0.42) 50%, transparent 100%);
+  content: "";
+  height: 180%;
+  left: -120%;
+  pointer-events: none;
+  position: absolute;
+  top: -40%;
+  transform: rotate(10deg);
+  transition: left 700ms cubic-bezier(0.16, 1, 0.3, 1);
+  width: 55%;
+}
+
+.interactive-card {
+  overflow: hidden;
+  position: relative;
+}
+
+.interactive-card:hover::after {
+  left: 140%;
+}
+
+.partner-motion {
+  animation: marquee-drift 2.8s ease-in-out infinite alternate;
+}
