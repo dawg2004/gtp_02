@@ -4,7 +4,7 @@ export function Newsletter() {
       <div className="mx-auto grid max-w-7xl gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[1fr_1.1fr] lg:px-8">
         <div>
           <p className="text-xs font-semibold tracking-[0.22em] text-stone-600">NEWSLETTER</p>
-          <h2 className="mt-3 font-serif text-4xl text-stone-950">Stay close to the studio calendar.</h2>
+          <h2 className="mt-3 font-serif text-4xl text-stone-950">スタジオで開催予定のイベント</h2>
         </div>
         <form className="flex flex-col gap-3 self-end sm:flex-row">
           <input

@@ -1,5 +1,12 @@
 import Link from "next/link";
 
+const footerLinks = [
+  { label: "イベント", href: "/events" },
+  { label: "アーカイブ", href: "/events" },
+  { label: "配信動画", href: "#" },
+  { label: "参加者用アーカイブ", href: "#" },
+];
+
 export function Footer() {
   return (
     <footer className="border-t border-stone-200 bg-stone-950 text-stone-100">
@@ -10,19 +17,18 @@ export function Footer() {
             <span className="block">ARCHIVE</span>
           </div>
           <p className="mt-5 max-w-sm text-sm leading-7 text-stone-400">
-            Studio events, reports, videos, and photographs from a creative space for food, music, conversation, and craft.
+            食、音楽、対話、ワークショップを通して生まれた出来事を、写真・記事・映像で記録するスタジオアーカイブ。
           </p>
         </div>
-        <div className="grid gap-8 sm:grid-cols-3">
-          {["Archive", "Studio", "Social"].map((title) => (
-            <div key={title}>
-              <h3 className="text-xs font-semibold tracking-[0.18em] text-stone-300">{title}</h3>
-              <div className="mt-4 flex flex-col gap-3 text-sm text-stone-500">
-                <Link href="/events">Events</Link>
-                <Link href="#">Articles</Link>
-                <Link href="#">Videos</Link>
-              </div>
-            </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {footerLinks.map((item) => (
+            <Link
+              key={item.label}
+              href={item.href}
+              className="border-b border-stone-800 pb-3 text-sm text-stone-400 transition hover:border-stone-500 hover:text-stone-100"
+            >
+              {item.label}
+            </Link>
           ))}
         </div>
       </div>
