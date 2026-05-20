@@ -5,7 +5,7 @@ export function HeroFeaturedEvent() {
   const event = events[0];
   return (
     <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="hero-sweep relative min-h-[520px] overflow-hidden bg-stone-950 sm:min-h-[460px]">
+      <div className="relative min-h-[520px] overflow-hidden bg-stone-950 sm:min-h-[460px]">
         <img src={event.image} alt={event.title} className="hero-drift absolute inset-0 h-full w-full object-cover opacity-70" />
         <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/45 to-transparent" />
         <div className="relative flex min-h-[520px] max-w-[calc(100%-2rem)] flex-col justify-end p-6 text-white sm:min-h-[460px] sm:p-10 lg:max-w-5xl">
